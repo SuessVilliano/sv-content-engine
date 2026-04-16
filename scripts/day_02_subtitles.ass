@@ -1,0 +1,30 @@
+[Script Info]
+Title: SV Content
+ScriptType: v4.00+
+PlayResX: 720
+PlayResY: 1280
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
+Style: SV,Helvetica,54,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,2,0,1,4,0,8,40,40,420,1
+
+[Events]
+Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
+Dialogue: 0,0:00:00.00,0:00:01.25,SV,,0,0,0,,THE TRADE YOU DO NOT
+Dialogue: 0,0:00:01.19,0:00:02.69,SV,,0,0,0,,TAKE IS SOMETIMES
+Dialogue: 0,0:00:02.64,0:00:04.38,SV,,0,0,0,,YOUR BEST TRADE.
+Dialogue: 0,0:00:05.00,0:00:05.88,SV,,0,0,0,,DISCIPLINE IS NOT
+Dialogue: 0,0:00:05.83,0:00:06.80,SV,,0,0,0,,JUST ABOUT WHAT YOU
+Dialogue: 0,0:00:06.75,0:00:07.33,SV,,0,0,0,,DO,
+Dialogue: 0,0:00:07.79,0:00:08.83,SV,,0,0,0,,IT IS ABOUT WHAT YOU
+Dialogue: 0,0:00:08.77,0:00:09.73,SV,,0,0,0,,DO NOT DO.
+Dialogue: 0,0:00:10.58,0:00:11.41,SV,,0,0,0,,EVERY TIME YOU SIT
+Dialogue: 0,0:00:11.35,0:00:12.31,SV,,0,0,0,,ON YOUR HANDS WHEN
+Dialogue: 0,0:00:12.25,0:00:13.13,SV,,0,0,0,,THERE IS NO CLEAR
+Dialogue: 0,0:00:13.08,0:00:14.79,SV,,0,0,0,,SETUP THAT IS DISCIPLINE
+Dialogue: 0,0:00:14.74,0:00:16.07,SV,,0,0,0,,PAYING YOU,
+Dialogue: 0,0:00:16.33,0:00:17.33,SV,,0,0,0,,MOST TRADERS NEVER
+Dialogue: 0,0:00:17.28,0:00:18.35,SV,,0,0,0,,COUNT THE LOSSES THEY
+Dialogue: 0,0:00:18.30,0:00:18.76,SV,,0,0,0,,AVOIDED.
+Dialogue: 0,0:00:19.28,0:00:19.85,SV,,0,0,0,,START COUNTING.

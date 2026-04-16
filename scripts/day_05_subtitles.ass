@@ -1,0 +1,33 @@
+[Script Info]
+Title: SV Content
+ScriptType: v4.00+
+PlayResX: 720
+PlayResY: 1280
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
+Style: SV,Helvetica,54,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,2,0,1,4,0,8,40,40,420,1
+
+[Events]
+Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
+Dialogue: 0,0:00:00.00,0:00:01.17,SV,,0,0,0,,TRADING WILL SHOW
+Dialogue: 0,0:00:01.12,0:00:02.34,SV,,0,0,0,,YOU WHO YOU ARE,
+Dialogue: 0,0:00:02.68,0:00:04.14,SV,,0,0,0,,AND WAYS MOST EXPERIENCES
+Dialogue: 0,0:00:04.09,0:00:05.10,SV,,0,0,0,,NEVER WILL.
+Dialogue: 0,0:00:05.59,0:00:06.38,SV,,0,0,0,,EVERY TIME YOU BREAK
+Dialogue: 0,0:00:06.33,0:00:07.12,SV,,0,0,0,,YOUR RULES,
+Dialogue: 0,0:00:07.58,0:00:08.39,SV,,0,0,0,,YOU LEARN SOMETHING.
+Dialogue: 0,0:00:09.03,0:00:10.03,SV,,0,0,0,,EVERY TIME YOU REVENGE
+Dialogue: 0,0:00:09.98,0:00:10.75,SV,,0,0,0,,TRADE,
+Dialogue: 0,0:00:11.14,0:00:12.07,SV,,0,0,0,,YOU LEARN SOMETHING.
+Dialogue: 0,0:00:12.74,0:00:13.61,SV,,0,0,0,,EVERY TIME YOU HOLD
+Dialogue: 0,0:00:13.56,0:00:14.77,SV,,0,0,0,,A WINNER TOO LONG,
+Dialogue: 0,0:00:15.17,0:00:16.08,SV,,0,0,0,,YOU LEARN SOMETHING.
+Dialogue: 0,0:00:16.42,0:00:17.35,SV,,0,0,0,,THE MARKET IS NOT
+Dialogue: 0,0:00:17.30,0:00:18.81,SV,,0,0,0,,JUST A FINANCIAL EXPERIENCE.
+Dialogue: 0,0:00:19.23,0:00:20.33,SV,,0,0,0,,IT IS A PSYCHOLOGICAL
+Dialogue: 0,0:00:20.28,0:00:21.07,SV,,0,0,0,,LABORATORY.
+Dialogue: 0,0:00:21.66,0:00:22.67,SV,,0,0,0,,THE QUESTION IS WHETHER
+Dialogue: 0,0:00:22.62,0:00:23.76,SV,,0,0,0,,YOU ARE RUNNING EXPERIMENTS
+Dialogue: 0,0:00:23.71,0:00:25.47,SV,,0,0,0,,OR JUST REACTING.

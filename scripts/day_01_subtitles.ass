@@ -1,0 +1,35 @@
+[Script Info]
+Title: SV Content
+ScriptType: v4.00+
+PlayResX: 720
+PlayResY: 1280
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
+Style: SV,Helvetica,58,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,2,0,1,4,0,8,40,40,420,1
+
+[Events]
+Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
+Dialogue: 0,0:00:00.00,0:00:01.07,SV,,0,0,0,,YOU ARE NOT LOSING
+Dialogue: 0,0:00:01.02,0:00:02.18,SV,,0,0,0,,BECAUSE OF THE MARKET,
+Dialogue: 0,0:00:02.60,0:00:03.54,SV,,0,0,0,,YOU ARE LOSING BECAUSE
+Dialogue: 0,0:00:03.50,0:00:04.10,SV,,0,0,0,,OF YOU.
+Dialogue: 0,0:00:04.37,0:00:05.42,SV,,0,0,0,,THE MARKET IS NEUTRAL,
+Dialogue: 0,0:00:05.66,0:00:06.62,SV,,0,0,0,,IT RESPONDS TO YOUR
+Dialogue: 0,0:00:06.58,0:00:07.08,SV,,0,0,0,,DECISIONS.
+Dialogue: 0,0:00:07.98,0:00:08.83,SV,,0,0,0,,WHEN YOU TRADE WITH
+Dialogue: 0,0:00:08.77,0:00:09.25,SV,,0,0,0,,FEAR,
+Dialogue: 0,0:00:09.75,0:00:11.05,SV,,0,0,0,,YOU GET FEARS RESULTS.
+Dialogue: 0,0:00:11.66,0:00:12.47,SV,,0,0,0,,WHEN YOU TRADE WITH
+Dialogue: 0,0:00:12.41,0:00:13.23,SV,,0,0,0,,IMPATIENCE,
+Dialogue: 0,0:00:13.59,0:00:14.41,SV,,0,0,0,,YOU GET IMPATIENCE
+Dialogue: 0,0:00:14.35,0:00:15.16,SV,,0,0,0,,AS RESULTS.
+Dialogue: 0,0:00:15.90,0:00:16.97,SV,,0,0,0,,MOST TRADERS SPEND
+Dialogue: 0,0:00:16.92,0:00:18.05,SV,,0,0,0,,YEARS BLAMING THE
+Dialogue: 0,0:00:18.00,0:00:18.76,SV,,0,0,0,,WRONG THING.
+Dialogue: 0,0:00:19.32,0:00:20.42,SV,,0,0,0,,THE DAY YOU STOP BLAMING
+Dialogue: 0,0:00:20.37,0:00:21.67,SV,,0,0,0,,THE MARKET AND START
+Dialogue: 0,0:00:21.62,0:00:22.71,SV,,0,0,0,,STUDYING YOURSELF,
+Dialogue: 0,0:00:22.96,0:00:24.03,SV,,0,0,0,,IS THE DAY EVERYTHING
+Dialogue: 0,0:00:23.98,0:00:24.85,SV,,0,0,0,,STARTS TO CHANGE.

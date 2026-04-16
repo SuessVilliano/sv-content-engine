@@ -1,0 +1,31 @@
+SV CONTENT ENGINE — FOLDER GUIDE
+
+beats/          Drop Suno beats here (Claude auto-assigns by mood)
+scripts/        Daily scripts ready for Vox voice generation
+voice/          Generated audio files from Vox
+broll_library/  Generated B-roll clips organized by content pillar
+masters/        Assembled 16:9 master videos (source of truth)
+shorts_reels/   Auto-resized 9:16 versions for Shorts, Reels, TikTok
+approved/       Content you've reviewed and approved — queued for posting
+scheduled/      Ready to post with metadata attached
+posted/         Archive of everything published
+assets/music    Your Suno beats library (auto-synced from beats/)
+assets/thumbnails  Thumbnail images
+assets/overlays    Text overlay templates
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+VOXCPM LOCAL API (FREE - RUNS ON YOUR MAC GPU)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+URL: http://localhost:8808
+Health: GET /api/health
+Clone voice: POST /api/clone
+  Body: {text, reference_audio}
+  Reference: /Users/jamaurjohnson/Documents/SV_Content_Engine/assets/sv_reference.wav
+TTS (no clone): POST /api/tts
+  Body: {text}
+
+Voice files output to: voice/
+Naming: day_XX_sv.wav
+
+STATUS: LIVE - Day 1 complete (16.8s), Day 2 generating
+Cost: $0.00 per clip

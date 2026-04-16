@@ -1,0 +1,42 @@
+SV — DAY 01 | MINDSET | B-ROLL PROMPTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PILLAR: Mindset
+TONE: Dark cinematic. Introspective. Heavy silence. Interior power.
+STATUS: Prompts ready — awaiting fal.ai balance top-up for Seedance generation.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+PROMPT 01 — Veo 3 (Environmental)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+FILE: broll_library/Mindset/day_01_shot_01.mp4
+A lone figure sits at a glass desk in a dark room. Multiple monitors glow with trading charts. The room is perfectly still. The figure hasn't moved in minutes. Slow push-in. Cinematic. Cool blue-black color grade. No sound except the faint hum of electronics. Ultra-realistic. 4K. Documentary-style depth of field.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+PROMPT 02 — Veo 3 (Environmental)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+FILE: broll_library/Mindset/day_01_shot_02.mp4
+Extreme close-up of a human eye, reflections of candlestick charts visible in the iris. Slow subtle movement. The eye is completely calm — no blinking, no stress. Dark dramatic lighting. Teal and orange color grade. Cinematic lens flare at the edge. Hyper-detailed. Meditative atmosphere.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+PROMPT 03 — Veo 3 (Environmental)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+FILE: broll_library/Mindset/day_01_shot_03.mp4
+A glass of water sitting perfectly still on a marble desk next to a keyboard. The room around it blurs. The water does not ripple. Overhead shot slowly rotating clockwise. Cool neutral light. Minimal. Zen. The shot feels intentional — calm in the middle of chaos. 4K. Cinematic color grade.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+PROMPT 04 — Seedance 2.0 (Character)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+FILE: broll_library/Mindset/day_01_shot_04.mp4
+Medium shot of a focused young Black man in a dark hoodie, seated at a trading station, hands relaxed on the desk. He stares at the screen — completely composed. Not excited. Not afraid. Just present. Background slightly out of focus. Soft rim lighting from monitors. Cinematic depth. Urban loft setting. Shot communicates absolute psychological control.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+PROMPT 05 — Seedance 2.0 (Character)
+━━━━━━━━━━━━━━━━━━━━━━━━━
+FILE: broll_library/Mindset/day_01_shot_05.mp4
+Close-up of hands slowly closing a trading journal. The journal rests on a dark wooden desk. A single pen rolls gently to the side. The motion is deliberate — final. The light is warm amber against a dark room. The moment communicates ritual and discipline. Shallow depth of field. No rush. Cinematic.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️  ACTION REQUIRED
+━━━━━━━━━━━━━━━━━━━━━━━━━
+fal.ai account balance exhausted. Top up at: fal.ai/dashboard/billing
+Once topped up, re-run the scheduled task and Seedance clips will generate automatically.

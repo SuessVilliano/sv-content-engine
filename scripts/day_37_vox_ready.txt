@@ -1,0 +1,19 @@
+Most traders backtest to find confidence in their setup.
+
+That is the wrong use of backtesting.
+
+Backtesting tells you what the setup did in historical data.
+Forward testing tells you if you can execute the setup in live conditions.
+
+They are different skills.
+
+The setup that looks perfect in backtest...
+will challenge your discipline in real-time.
+
+Backtest to understand the edge.
+Forward test to develop the execution.
+Live trade to produce the results.
+
+Each phase has a specific purpose.
+
+Source Vessel. Hybrid Funding.

@@ -1,0 +1,30 @@
+[Script Info]
+Title: SV Content
+ScriptType: v4.00+
+PlayResX: 720
+PlayResY: 1280
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
+Style: SV,Helvetica,54,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,2,0,1,4,0,8,40,40,420,1
+
+[Events]
+Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
+Dialogue: 0,0:00:00.00,0:00:01.15,SV,,0,0,0,,THE MOST PROFITABLE
+Dialogue: 0,0:00:01.10,0:00:03.08,SV,,0,0,0,,SKILL IN TRADING CAN
+Dialogue: 0,0:00:03.04,0:00:04.08,SV,,0,0,0,,NOT BE LEARNED FROM
+Dialogue: 0,0:00:04.04,0:00:04.67,SV,,0,0,0,,A CHART,
+Dialogue: 0,0:00:05.05,0:00:05.67,SV,,0,0,0,,PATIENCE,
+Dialogue: 0,0:00:06.41,0:00:07.50,SV,,0,0,0,,WAITING FOR THE SETUP,
+Dialogue: 0,0:00:08.03,0:00:09.19,SV,,0,0,0,,WAITING FOR CONFIRMATION,
+Dialogue: 0,0:00:09.83,0:00:10.89,SV,,0,0,0,,NOT FORCING TRADES
+Dialogue: 0,0:00:10.83,0:00:12.07,SV,,0,0,0,,OUT OF BOREDOM OR
+Dialogue: 0,0:00:12.01,0:00:12.71,SV,,0,0,0,,FOAMOLD.
+Dialogue: 0,0:00:13.17,0:00:14.07,SV,,0,0,0,,THE TRADERS WHO MAKE
+Dialogue: 0,0:00:14.01,0:00:15.08,SV,,0,0,0,,THE MOST MONEY PER
+Dialogue: 0,0:00:15.03,0:00:17.15,SV,,0,0,0,,TRADE OFTEN MAKE THE
+Dialogue: 0,0:00:17.10,0:00:18.25,SV,,0,0,0,,FEWEST TRADES,
+Dialogue: 0,0:00:18.73,0:00:19.87,SV,,0,0,0,,QUALITY OVER QUANTITY
+Dialogue: 0,0:00:19.82,0:00:21.25,SV,,0,0,0,,IS NOT A CLICHÉ,
+Dialogue: 0,0:00:21.28,0:00:21.97,SV,,0,0,0,,IT IS A STRATEGY.

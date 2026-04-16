@@ -1,0 +1,18 @@
+Your strategy is not designed for all market conditions.
+
+No strategy is.
+
+Trend-following strategies fail in ranges.
+Mean-reversion strategies fail in trends.
+Breakout strategies fail in choppy conditions.
+
+The successful trader identifies the current phase first.
+Then selects the strategy appropriate to that phase.
+Then executes.
+
+If the phase changes, the strategy changes with it.
+
+The market always leads.
+The strategy always follows.
+
+Source Vessel. Hybrid Funding.

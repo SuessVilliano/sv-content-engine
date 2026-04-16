@@ -1,0 +1,43 @@
+# Large media files — stored in Cloudflare R2, not git
+shorts_reels/*.mp4
+shorts_reels/*.mov
+masters/*.mp4
+masters/*.mov
+broll_library/**/*.mp4
+broll_library/**/*.mov
+voice/*.wav
+voice/*.mp3
+assets/*.wav
+assets/*.mp3
+assets/music/*.mp3
+
+# Thumbnails (auto-generated)
+/tmp/sv_dashboard_thumbs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+*.egg-info/
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# Logs
+*.log
+/tmp/
+
+# Drafts and generated outputs (keep scripts, not outputs)
+drafts/
+posted/
+scheduled/
+
+# Keep schedule.json (it's operational state)
+# !schedule.json
+
+# Node / if we add a frontend later
+node_modules/
+.env
+.env.local

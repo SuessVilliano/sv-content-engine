@@ -1,0 +1,15 @@
+There are two exit philosophies.
+
+Time-based: close all positions at the end of the session regardless of where they are.
+This removes the overnight risk. It removes emotional attachment to position.
+
+Price-based: exit when your target is hit or your stop is reached.
+This is cleaner in theory. It requires stronger discipline in practice.
+
+Most traders benefit from combining both.
+A stop and target in place. Plus a session close rule.
+
+The exit strategy is as important as the entry.
+Design it before the trade opens.
+
+Source Vessel. Hybrid Funding.

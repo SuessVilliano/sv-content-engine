@@ -1,0 +1,28 @@
+[Script Info]
+Title: SV Content
+ScriptType: v4.00+
+PlayResX: 720
+PlayResY: 1280
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,Alignment,MarginL,MarginR,MarginV,Encoding
+Style: SV,Helvetica,54,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,2,0,1,4,0,8,40,40,420,1
+
+[Events]
+Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text
+Dialogue: 0,0:00:00.00,0:00:01.42,SV,,0,0,0,,FEAR IN TRADING IS
+Dialogue: 0,0:00:01.37,0:00:02.30,SV,,0,0,0,,NOT YOUR ENEMY.
+Dialogue: 0,0:00:02.52,0:00:03.92,SV,,0,0,0,,IGNORE IT FEAR IS.
+Dialogue: 0,0:00:04.24,0:00:05.29,SV,,0,0,0,,THE TRADERS WHO SUCCEED
+Dialogue: 0,0:00:05.24,0:00:06.25,SV,,0,0,0,,ARE NOT THE ONES WHO
+Dialogue: 0,0:00:06.20,0:00:07.08,SV,,0,0,0,,FEEL NO FEAR.
+Dialogue: 0,0:00:07.48,0:00:08.00,SV,,0,0,0,,THEY ARE THE ONES
+Dialogue: 0,0:00:07.96,0:00:09.55,SV,,0,0,0,,WHO USE FEAR AS INFORMATION
+Dialogue: 0,0:00:09.50,0:00:10.95,SV,,0,0,0,,RATHER THAN INSTRUCTION.
+Dialogue: 0,0:00:11.41,0:00:13.25,SV,,0,0,0,,FEAR SAYS SLOW DOWN.
+Dialogue: 0,0:00:13.43,0:00:14.21,SV,,0,0,0,,CHECK THE SETUP.
+Dialogue: 0,0:00:14.41,0:00:15.21,SV,,0,0,0,,IS THIS WITHIN YOUR
+Dialogue: 0,0:00:15.16,0:00:15.58,SV,,0,0,0,,RULES?
+Dialogue: 0,0:00:15.80,0:00:17.15,SV,,0,0,0,,IT DOES NOT SAY CLOSE
+Dialogue: 0,0:00:17.10,0:00:18.07,SV,,0,0,0,,YOUR ACCOUNT AND QUIT.

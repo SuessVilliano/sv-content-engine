@@ -1,0 +1,5 @@
+# Vercel serverless only needs Flask to serve the dashboard UI + read APIs.
+# The optional heavy libs (whisper/torch, librosa, anthropic, google-genai)
+# are intentionally excluded — they exceed the serverless size limit and the
+# app degrades gracefully without them. Full power runs locally; see launch.py.
+flask>=3.0

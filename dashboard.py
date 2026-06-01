@@ -117,7 +117,7 @@ if BRAND is not None:
     SCRIPTS = str(BRAND.folder("scripts"))
     DRAFTS  = str(BRAND.folder("drafts"))
 else:
-    BASE    = "/Users/jamaurjohnson/Documents/SV_Content_Engine"
+    BASE    = os.environ.get("SV_BASE_DIR") or "/Users/jamaurjohnson/Documents/SV_Content_Engine"
     SHORTS  = f"{BASE}/shorts_reels"
     VOICE   = f"{BASE}/voice"
     BEATS   = f"{BASE}/assets/music"
@@ -137,7 +137,11 @@ FFMPEG  = _find_bin("ffmpeg")
 FFPROBE = _find_bin("ffprobe")
 
 for d in [THUMBS, DRAFTS]:
-    os.makedirs(d, exist_ok=True)
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        pass  # read-only filesystem (e.g. serverless) — features needing
+              # this dir degrade gracefully; the dashboard still boots.
 
 def list_files(folder, exts):
     if not os.path.exists(folder): return []

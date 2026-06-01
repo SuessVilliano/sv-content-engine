@@ -93,6 +93,12 @@ class Brand:
     # ---- filesystem ------------------------------------------------------
     @property
     def base_dir(self) -> Path:
+        # SV_BASE_DIR overrides the brand's configured path. Lets a hosted
+        # deploy (e.g. Vercel) point every folder at the bundled repo instead
+        # of a machine-specific absolute path. Unset locally ⇒ no change.
+        override = os.environ.get("SV_BASE_DIR")
+        if override:
+            return Path(os.path.expanduser(override)).resolve()
         return Path(os.path.expanduser(self.raw.get("base_dir", "."))).resolve()
 
     def folder(self, key: str) -> Path:

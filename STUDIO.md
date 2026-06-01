@@ -3,6 +3,20 @@
 Type what you want → it builds it → you see it in the platform. Free-first, so a
 day of content costs cents, not hundreds.
 
+## Run it
+
+```
+python3 launch.py            # preflight every service, then boot the Studio
+python3 launch.py --check    # just check what's up / what to start
+python3 launch.py --port 5000
+```
+
+`launch.py` checks Flask, VoxCPM (:8808), ComfyUI (:8188) + workflows, ffmpeg,
+and librosa/whisper, prints exactly what to start for anything offline, then
+boots the dashboard at http://localhost:4444. Anything missing degrades
+gracefully — the Studio always runs; only that one capability waits.
+
+
 ```
   ✨ Studio (dashboard, localhost:4444)
      command bar → Plan (free preview) / Build (queue)

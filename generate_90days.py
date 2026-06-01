@@ -7,10 +7,24 @@ Pillar rotation: Mindset (1-14) → Discipline (15-28) → Strategy (29-42) → 
 """
 import os
 
-BASE = "/Users/jamaurjohnson/Documents/SV_Content_Engine/scripts"
-os.makedirs(BASE, exist_ok=True)
+# ── Multi-brand config layer ────────────────────────────────────────────
+# Output dir and hashtags come from the active brand (brands/_active.json or
+# $SV_BRAND). Falls back to the original Source Vessel defaults if the brand
+# layer is absent, so this generator keeps working unchanged.
+try:
+    import brands as _brands
+    _BRAND = _brands.active_brand()
+except Exception:  # noqa: BLE001
+    _BRAND = None
 
-TAGS = "#trading #trader #daytrader #forex #stocks #tradermindset #discipline #patience #psychology #consistency #hybridfunding #sourcevessele #wealth #financialfreedom #mindset #growthmindset #tradinglife #marketsmastery #funded #proptrading"
+if _BRAND is not None:
+    BASE = str(_BRAND.folder("scripts"))
+    TAGS = _BRAND.hashtags
+else:
+    BASE = "/Users/jamaurjohnson/Documents/SV_Content_Engine/scripts"
+    TAGS = "#trading #trader #daytrader #forex #stocks #tradermindset #discipline #patience #psychology #consistency #hybridfunding #sourcevessele #wealth #financialfreedom #mindset #growthmindset #tradinglife #marketsmastery #funded #proptrading"
+
+os.makedirs(BASE, exist_ok=True)
 
 # Days 6-90 content data
 # Format: (day, pillar, hook, vox_script, ig_caption)

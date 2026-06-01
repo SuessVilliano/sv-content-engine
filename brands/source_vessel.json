@@ -1,0 +1,64 @@
+{
+  "id": "source_vessel",
+  "name": "Source Vessel — Hybrid Funding",
+  "type": "persona",
+  "goal": "following",
+  "base_dir": "/Users/jamaurjohnson/Documents/SV_Content_Engine",
+
+  "voice": {
+    "engine": "voxcpm",
+    "api_url": "http://localhost:8808/api/clone",
+    "reference_audio": "/Users/jamaurjohnson/Documents/SV_Content_Engine/assets/sv_voice_harrahs_clean.wav",
+    "fallback_reference": "/Users/jamaurjohnson/Documents/SV_Content_Engine/assets/sv_reference.wav",
+    "style_rules": [
+      "No contractions. 'do not' not 'don't'. 'is not' not 'isn't'.",
+      "'...' for pauses — 3 dots, no em-dash ellipsis",
+      "Short sentences. Never more than 12 words per sentence.",
+      "No stage directions, headers, or formatting in the vox_ready file",
+      "All caps only for 1-2 KEY words per script that need emphasis",
+      "Voice is deliberate, measured, already arrived — never hustling"
+    ]
+  },
+
+  "avatar": {
+    "engine": "heygen",
+    "talking_photo_id": "872aba25a4da419d982d180df7ad156a",
+    "backup_talking_photo_id": "686f4e54da284cb7907c9ef27dbe3086",
+    "api_key": "env:HEYGEN_API_KEY",
+    "reference_image": "/Users/jamaurjohnson/Documents/SV_Content_Engine/assets/character_sheet/sv_face.png",
+    "character_sheet": "/Users/jamaurjohnson/Documents/SV_Content_Engine/assets/character_sheet/SV_Character_Sheet.md",
+    "description": "Black turtleneck, gold Cuban link chain, dark glasses, looking directly at camera. Cinematic red/warm tones. Face fills frame."
+  },
+
+  "pillars": [
+    {"name": "MINDSET",    "weeks": [1, 2], "tone": "dark interiors, trading desks, eyes, stillness"},
+    {"name": "DISCIPLINE", "weeks": [3, 4], "tone": "precision objects, clean lines, clocks, journals"},
+    {"name": "STRATEGY",   "weeks": [5, 6], "tone": "chess pieces, blueprints, maps, architecture"},
+    {"name": "REALITY",    "weeks": [7, 8], "tone": "raw city, hustle, truth, unfiltered moments"}
+  ],
+
+  "hashtags": "#trading #trader #daytrader #forex #stocks #tradermindset #discipline #patience #psychology #consistency #hybridfunding #sourcevessele #wealth #financialfreedom #mindset #growthmindset #tradinglife #marketsmastery #funded #proptrading",
+
+  "signoff": "Source Vessel. Hybrid Funding.",
+
+  "brand_voice": {
+    "tone": "Calm. Certain. Deliberate. Already figured it out.",
+    "never": "Hyped. Rushed. Salesy. Preachy. AI-sounding.",
+    "openers": ["Most traders miss this...", "Pay attention...", "The truth is..."],
+    "thesis": "You do not need more information. You need more control."
+  },
+
+  "generation": {
+    "default_route": "local",
+    "text_to_video":  {"local": "ltx-video", "hero": "veo-3.1"},
+    "image_to_video": {"local": "wan2.2",    "hero": "kling-2.0"},
+    "music_video":    {"local": "ltx-2.3-audio", "hero": "freebeat"}
+  },
+
+  "distribution": {
+    "ghl_location_id": "alK3nxmaA2aXkCGUQlUT",
+    "ghl_pit_token": "env:GHL_PIT_TOKEN",
+    "platforms": ["FB", "IG", "TikTok", "X", "YouTube"],
+    "r2_bucket": "sv-content-engine"
+  }
+}

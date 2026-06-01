@@ -12,10 +12,25 @@ from datetime import datetime
 # Generation status tracker
 GEN_STATUS = {}  # day_num -> {"status": "generating|done|error", "message": "..."}
 
-VOXCPM_API = "http://localhost:8808/api/clone"
-# Use the clean Harrahs H1 reference (confirmed best quality)
-SV_REF     = "/Users/jamaurjohnson/Documents/SV_Content_Engine/assets/sv_voice_harrahs_clean.wav"
-SV_REF_FALLBACK = "/Users/jamaurjohnson/Documents/SV_Content_Engine/assets/sv_reference.wav"
+# ── Multi-brand config layer ────────────────────────────────────────────
+# The active brand (brands/_active.json or $SV_BRAND) drives all paths, voice,
+# and routing. If the brand layer is absent we fall back to the original
+# hardcoded Source Vessel defaults so this dashboard keeps working unchanged.
+try:
+    import brands as _brands
+    BRAND = _brands.active_brand()
+except Exception:  # noqa: BLE001 — never let config break the dashboard
+    BRAND = None
+
+if BRAND is not None:
+    VOXCPM_API      = BRAND.voice.get("api_url", "http://localhost:8808/api/clone")
+    SV_REF          = BRAND.voice.get("reference_audio", "")
+    SV_REF_FALLBACK = BRAND.voice.get("fallback_reference", "")
+else:
+    VOXCPM_API = "http://localhost:8808/api/clone"
+    # Use the clean Harrahs H1 reference (confirmed best quality)
+    SV_REF     = "/Users/jamaurjohnson/Documents/SV_Content_Engine/assets/sv_voice_harrahs_clean.wav"
+    SV_REF_FALLBACK = "/Users/jamaurjohnson/Documents/SV_Content_Engine/assets/sv_reference.wav"
 
 def generate_voice_async(day_num, script_text):
     """Generate voice in background thread so approve is non-blocking"""
@@ -57,13 +72,21 @@ def generate_voice_async(day_num, script_text):
 
 app = Flask(__name__)
 
-BASE    = "/Users/jamaurjohnson/Documents/SV_Content_Engine"
-SHORTS  = f"{BASE}/shorts_reels"
-VOICE   = f"{BASE}/voice"
-BEATS   = f"{BASE}/assets/music"
-SCRIPTS = f"{BASE}/scripts"
+if BRAND is not None:
+    BASE    = str(BRAND.base_dir)
+    SHORTS  = str(BRAND.folder("shorts"))
+    VOICE   = str(BRAND.folder("voice"))
+    BEATS   = str(BRAND.folder("beats"))
+    SCRIPTS = str(BRAND.folder("scripts"))
+    DRAFTS  = str(BRAND.folder("drafts"))
+else:
+    BASE    = "/Users/jamaurjohnson/Documents/SV_Content_Engine"
+    SHORTS  = f"{BASE}/shorts_reels"
+    VOICE   = f"{BASE}/voice"
+    BEATS   = f"{BASE}/assets/music"
+    SCRIPTS = f"{BASE}/scripts"
+    DRAFTS  = f"{BASE}/drafts"
 THUMBS  = "/tmp/sv_dashboard_thumbs"
-DRAFTS  = f"{BASE}/drafts"
 FFMPEG  = "/opt/homebrew/bin/ffmpeg"
 FFPROBE = "/opt/homebrew/bin/ffprobe"
 

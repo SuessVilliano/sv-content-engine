@@ -1,0 +1,52 @@
+{
+  "id": "my_music",
+  "name": "ARTIST NAME — Music",
+  "type": "music",
+  "goal": "music_videos",
+  "base_dir": "~/Documents/SV_Content_Engine/brands/my_music",
+
+  "music": {
+    "songs_dir": "songs",
+    "source": "suno",
+    "_note": "Drop final mixes (mp3/wav) in songs/. Lyrics go next to each song as <songname>.lyrics.txt. The engine beat-detects locally (free) and cuts clips to the drops.",
+    "beat_sync": true,
+    "lyric_video": true,
+    "performance_mode": false
+  },
+
+  "avatar": {
+    "engine": "heygem",
+    "_note": "Optional. Set if YOU appear/perform in the video. Leave reference_image blank for pure visualizer / abstract music videos.",
+    "reference_image": "",
+    "character_sheet": ""
+  },
+
+  "pillars": [
+    {"name": "RELEASE",   "tone": "cinematic, the hero music video for a single"},
+    {"name": "SNIPPET",   "tone": "15-30s vertical hook clips for Reels/TikTok/Shorts"},
+    {"name": "LYRIC",     "tone": "kinetic typography lyric video"},
+    {"name": "VISUALIZER","tone": "audio-reactive abstract loop for streaming/ambient posts"}
+  ],
+
+  "hashtags": "#newmusic #indieartist #musicvideo #newsong #artist #musicproducer #unsigned #spotify #applemusic #musicvisualizer",
+
+  "signoff": "",
+
+  "brand_voice": {
+    "tone": "Whatever the song is. The visuals serve the track, not a talking script.",
+    "thesis": "The song leads. The video follows the energy of the song."
+  },
+
+  "generation": {
+    "default_route": "local",
+    "music_video":    {"local": "ltx-2.3-audio", "hero": "freebeat"},
+    "image_to_video": {"local": "wan2.2",        "hero": "kling-2.0"},
+    "text_to_video":  {"local": "ltx-video",     "hero": "veo-3.1"}
+  },
+
+  "distribution": {
+    "ghl_location_id": "",
+    "ghl_pit_token": "env:GHL_PIT_TOKEN",
+    "platforms": ["YouTube", "IG", "TikTok", "X"]
+  }
+}

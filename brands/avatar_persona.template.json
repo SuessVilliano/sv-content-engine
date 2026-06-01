@@ -1,0 +1,58 @@
+{
+  "id": "my_persona",
+  "name": "PERSONA NAME",
+  "type": "persona",
+  "goal": "following",
+  "base_dir": "~/Documents/SV_Content_Engine/brands/my_persona",
+
+  "avatar": {
+    "engine": "heygem",
+    "_note": "Realistic recurring face. The #1 rule for building a following is CONSISTENCY — lock ONE reference image and one voice and never change them. Heygem (local, free) and Hedra both keep zero face-drift across videos.",
+    "reference_image": "assets/persona_face.png",
+    "character_sheet": "assets/persona_character_sheet.md",
+    "description": "Describe the look in detail: age, style, setting, lighting. The same description seeds every B-roll still so the persona stays identical."
+  },
+
+  "voice": {
+    "engine": "voxcpm",
+    "api_url": "http://localhost:8808/api/clone",
+    "reference_audio": "",
+    "fallback_reference": "",
+    "style_rules": [
+      "Pick a signature cadence and keep it identical across every post",
+      "Short sentences. One idea per line.",
+      "'...' for pauses"
+    ]
+  },
+
+  "pillars": [
+    {"name": "PILLAR_1", "weeks": [1, 2], "tone": "describe the visual world of this theme"},
+    {"name": "PILLAR_2", "weeks": [3, 4], "tone": "..."},
+    {"name": "PILLAR_3", "weeks": [5, 6], "tone": "..."},
+    {"name": "PILLAR_4", "weeks": [7, 8], "tone": "..."}
+  ],
+
+  "hashtags": "#fyp #viral #motivation",
+
+  "signoff": "",
+
+  "brand_voice": {
+    "tone": "Define the personality in one line. This must never drift.",
+    "never": "List what this persona would never say or do.",
+    "openers": ["Signature opener 1...", "Signature opener 2..."],
+    "thesis": "The one core belief this persona repeats in different words forever."
+  },
+
+  "generation": {
+    "default_route": "local",
+    "text_to_video":  {"local": "ltx-video", "hero": "veo-3.1"},
+    "image_to_video": {"local": "wan2.2",    "hero": "kling-2.0"},
+    "music_video":    {"local": "ltx-2.3-audio", "hero": "freebeat"}
+  },
+
+  "distribution": {
+    "ghl_location_id": "",
+    "ghl_pit_token": "env:GHL_PIT_TOKEN",
+    "platforms": ["IG", "TikTok", "YouTube", "X"]
+  }
+}

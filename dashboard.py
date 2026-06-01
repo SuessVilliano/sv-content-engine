@@ -727,9 +727,24 @@ async function loadJobs() {
     list.innerHTML = '';
     if (!jobs.length) { empty.classList.remove('hidden'); return; }
     empty.classList.add('hidden');
-    const badge = { planned:'#888', queued:'#C9A84C', running:'#A78BFA', done:'#4ADE80', error:'#F87171' };
+    const badge = { planned:'#888', queued:'#C9A84C', running:'#A78BFA',
+                    done:'#4ADE80', partial:'#C9A84C', skipped:'#777', error:'#F87171' };
+    let anyRunning = false;
     jobs.forEach(j => {
       const s = j.spec, c = (j.plan && j.plan.est_cost) || 0;
+      if (j.status === 'running' || j.status === 'queued') anyRunning = true;
+      const steps = (j.step_status && Object.keys(j.step_status).length)
+        ? '<div class="flex flex-wrap gap-1 mt-2">' + Object.entries(j.step_status).map(([k,v]) => {
+            const st = v.startsWith('done') ? '#4ADE80' : v.startsWith('running') ? '#A78BFA'
+                     : v.startsWith('error') ? '#F87171' : '#666';
+            const ic = v.startsWith('done') ? '✓' : v.startsWith('running') ? '…'
+                     : v.startsWith('error') ? '✕' : '–';
+            return '<span class="text-[10px] px-1.5 py-0.5 rounded" style="background:#00000033;color:'+st+'" title="'+v.replace(/"/g,'')+'">'+ic+' '+k+'</span>';
+          }).join('') + '</div>'
+        : '';
+      const preview = (j.status === 'done' && j.output)
+        ? '<video src="/stream/job/'+j.id+'" controls preload="metadata" class="w-full rounded-lg mt-2" style="max-height:240px;background:#000"></video>'
+        : '';
       const card = document.createElement('div');
       card.className = 'card rounded-xl p-3';
       card.innerHTML =
@@ -738,9 +753,12 @@ async function loadJobs() {
         +   (j.status||'').toUpperCase()+' · '+s.kind.replace("_"," ")+'</span>'
         + '<span class="text-[11px]" style="color:#666">'+(c>0?'$'+c:'free')+'</span></div>'
         + '<p class="text-sm" style="color:#ddd">'+(s.prompt||'').slice(0,120)+'</p>'
+        + steps + preview
         + '<p class="text-[10px] mt-1" style="color:#555">'+j.id+'</p>';
       list.appendChild(card);
     });
+    // while anything is running, poll faster so progress feels live
+    if (anyRunning) { clearTimeout(window._jobPoll); window._jobPoll = setTimeout(loadJobs, 4000); }
   } catch(e) { console.error(e); }
 }
 
@@ -1141,6 +1159,28 @@ def api_jobs():
         return jsonify(engine.list_jobs(BRAND))
     except Exception:  # noqa: BLE001
         return jsonify([])
+
+@app.route("/api/job/<job_id>")
+def api_job(job_id):
+    try:
+        import engine
+        job = engine.get_job(BRAND, job_id)
+        return jsonify(job or {"error": "not found"}), (200 if job else 404)
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/stream/job/<job_id>")
+def stream_job_file(job_id):
+    """Stream a finished job's output video for in-Studio preview."""
+    try:
+        import engine
+        job = engine.get_job(BRAND, job_id)
+        out = job and job.get("output")
+        if out and os.path.exists(out):
+            return send_file(out, mimetype="video/mp4")
+    except Exception:  # noqa: BLE001
+        pass
+    return ("not found", 404)
 
 @app.route("/api/videos")
 def api_videos():

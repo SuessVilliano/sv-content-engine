@@ -61,7 +61,17 @@ Hit **Plan** to see the steps + exact cost for free. Hit **Build** to produce it
 
 ## Roadmap (next builds)
 
-- [ ] **Live execution** — `engine.run()` drives VoxCPM/ComfyUI/ffmpeg so a Build
-      produces a real file that appears in the Studio preview.
+- [x] **Live execution** — Build runs the pipeline in the background (script →
+      VoxCPM voice → router/ComfyUI clips → ffmpeg assemble), streams per-step
+      progress to the Studio, and shows an inline preview when done. Steps that
+      can't run (service offline) skip with a clear reason instead of hanging,
+      so the job ends `partial` rather than failing.
 - [ ] **Drop-an-MP3 upload** in the Studio tab (browser → song.json → build).
 - [ ] **In-platform editor** — trim, reorder, swap look, re-cut to the beat.
+
+### Live execution — how it runs
+`engine.execute(job, brand)` walks the planned steps, writing each artifact into
+`<brand>/jobs/<id>/` and updating the job JSON after every step (the Studio polls
+`/api/job/<id>` every 4s while running). The final video is copied into the
+brand's `shorts_reels/` so the Library tab sees it too. A queued-job worker
+(`engine.process_queue`) is available for cron/headless runs.

@@ -33,8 +33,13 @@ import argparse
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import threading
 import time
+import urllib.error
+import urllib.request
 import uuid
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -52,6 +57,10 @@ try:
     import filters as _filters
 except Exception:  # noqa: BLE001
     _filters = None
+try:
+    import music_video as _mv
+except Exception:  # noqa: BLE001
+    _mv = None
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -337,6 +346,21 @@ def record_job(brand, job: Dict[str, Any]) -> None:
                             "prompt": job["spec"]["prompt"]}) + "\n")
 
 
+def _save_job(brand, job: Dict[str, Any]) -> None:
+    """Rewrite a job's JSON in place (live progress updates, no jsonl append)."""
+    (_jobs_dir(brand) / f"{job['id']}.json").write_text(json.dumps(job, indent=2))
+
+
+def get_job(brand, job_id: str) -> Optional[Dict[str, Any]]:
+    p = _jobs_dir(brand) / f"{job_id}.json"
+    if not p.exists():
+        return None
+    try:
+        return json.loads(p.read_text())
+    except json.JSONDecodeError:
+        return None
+
+
 def list_jobs(brand) -> List[Dict[str, Any]]:
     d = Path((brand.base_dir if brand else Path("."))) / "jobs"
     if not d.exists():
@@ -373,27 +397,264 @@ def build(prompt: str, brand_id: str = "", dry_run: bool = True,
         "status": "planned" if dry_run else "queued",
         "output": None,
     }
-    if not dry_run:
-        # Live execution drives VoxCPM/ComfyUI/ffmpeg via the other modules.
-        # Wired step-by-step in run(); kept guarded so planning always works.
-        job = run(job, brand)
+    job["step_status"] = {s["name"]: "pending" for s in p["steps"]}
     record_job(brand, job)
+    if not dry_run:
+        # Run live in the background so the command bar returns instantly and the
+        # Studio can poll progress. Tests call execute() directly (synchronous).
+        t = threading.Thread(target=_execute_safe, args=(job["id"], brand), daemon=True)
+        t.start()
+        job["status"] = "running"
     return job
 
 
-def run(job: Dict[str, Any], brand) -> Dict[str, Any]:
-    """Execute a planned job. Best-effort: each step is attempted and its status
-    recorded. The heavy services must be up (VoxCPM, ComfyUI, ffmpeg)."""
+# ──────────────────────────────────────────────────────────────────────────
+# Live execution
+# ──────────────────────────────────────────────────────────────────────────
+class Skip(RuntimeError):
+    """A step could not run (service offline / missing input). Not fatal —
+    the job continues and the step is marked skipped with the reason."""
+
+
+def _workdir(brand, job_id: str) -> Path:
+    d = _jobs_dir(brand) / job_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _ffmpeg() -> str:
+    for cand in ("/opt/homebrew/bin/ffmpeg", "/usr/bin/ffmpeg", "ffmpeg"):
+        if shutil.which(cand) or os.path.exists(cand):
+            return cand
+    return "ffmpeg"
+
+
+# ---- individual steps. Each returns a short note; raises Skip if it can't run.
+def _step_script(job, spec, brand, ctx) -> str:
+    """Write a script for the topic in the brand voice. Best-effort template;
+    a fuller writer can swap in later."""
+    topic = spec.topic or "today"
+    signoff = (brand.signoff if brand else "") or ""
+    text = (f"Pay attention.\n\n{topic.capitalize()}.\n\n"
+            f"This is where most people get it wrong.\n\n"
+            f"Slow down. Control what you can control.\n\n{signoff}").strip()
+    path = ctx["dir"] / "script.txt"
+    path.write_text(text)
+    ctx["script"] = str(path)
+    ctx["script_text"] = text
+    return f"script.txt ({len(text)} chars)"
+
+
+def _step_voice(job, spec, brand, ctx) -> str:
+    if brand is None:
+        raise Skip("no brand voice configured")
+    text = ctx.get("script_text", spec.topic or "")
+    api = brand.voice.get("api_url", "")
+    ref = brand.voice_reference()
+    out = ctx["dir"] / "voice.wav"
+    try:
+        payload = json.dumps({"text": text, "reference_audio": ref}).encode()
+        req = urllib.request.Request(api, data=payload,
+                                     headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=600) as r:
+            out.write_bytes(r.read())
+    except (urllib.error.URLError, OSError) as e:
+        raise Skip(f"VoxCPM offline ({e})")
+    ctx["voice"] = str(out)
+    return f"voice.wav ({out.stat().st_size // 1024}KB)"
+
+
+def _step_ingest(job, spec, brand, ctx) -> str:
+    if _mv is None:
+        raise Skip("music_video module unavailable")
+    song = spec.song
+    if song and not os.path.isabs(song) and brand is not None:
+        cand = Path(brand.folder("beats")) / song
+        if cand.exists():
+            song = str(cand)
+    if not song or not os.path.exists(song):
+        raise Skip(f"song not found: {spec.song or '(none)'}")
+    try:
+        out_json = str(ctx["dir"] / "song.json")
+        ctx["song"] = _mv.ingest(song, out_json)
+        ctx["song_path"] = song
+    except _mv.MissingDependency as e:
+        raise Skip(str(e))
+    return (f"{len(ctx['song'].get('beats', []))} beats, "
+            f"{len(ctx['song'].get('lyrics', []))} lyric lines")
+
+
+def _step_clips(job, spec, brand, ctx, kind="image_to_video") -> str:
+    if _router is None:
+        raise Skip("router unavailable")
+    n = _CLIP_COUNT.get(spec.kind, 4)
+    made: List[str] = []
+    errs: List[str] = []
+    for i in range(n):
+        try:
+            req = _router.GenRequest(kind=kind, prompt=spec.topic or spec.prompt,
+                                     seconds=5, hero=spec.hero,
+                                     out_path=str(ctx["dir"] / f"clip_{i}"))
+            res = _router.route(req, brand=brand)
+            if res.out_path:
+                made.append(res.out_path)
+        except (_router.BackendUnavailable, _router.BudgetExceeded) as e:
+            errs.append(str(e))
+            break
+    ctx["clips"] = made
+    if not made:
+        raise Skip(errs[0] if errs else "no clips produced")
+    return f"{len(made)} clip(s)"
+
+
+def _step_talking_head(job, spec, brand, ctx) -> str:
+    # Avatar adapters (heygen/heygem) plug in here. Until wired, skip cleanly so
+    # the rest of the job (b-roll + assembly) still runs.
+    engine_name = brand.avatar.get("engine") if brand else "heygem"
+    raise Skip(f"avatar engine '{engine_name}' not yet wired (b-roll continues)")
+
+
+def _step_assemble(job, spec, brand, ctx) -> str:
+    ff = _ffmpeg()
+    if not (shutil.which(ff) or os.path.exists(ff)):
+        raise Skip("ffmpeg not found")
+    out = ctx["dir"] / "final.mp4"
+    look = spec.looks or None
+
+    if spec.kind == "music_video":
+        song = ctx.get("song")
+        clips = ctx.get("clips") or []
+        if not song or not clips:
+            raise Skip("need song + clips to assemble")
+        if _mv is None:
+            raise Skip("music_video module unavailable")
+        res = _mv.render(song, clips, ctx["song_path"], str(out),
+                         cut=spec.cut, look=look, size=spec.aspect, run=True, ffmpeg=ff)
+        if not res.get("ok"):
+            raise Skip(f"ffmpeg failed: {res.get('error', '')[:200]}")
+    else:
+        clips = ctx.get("clips") or []
+        if not clips:
+            raise Skip("no clips to assemble")
+        # concat clips, apply look, add voice audio if present
+        w, h = spec.aspect.split("x")
+        cmd = [ff, "-y"]
+        for c in clips:
+            cmd += ["-i", c]
+        voice = ctx.get("voice")
+        if voice:
+            cmd += ["-i", voice]
+        fg = []
+        for i in range(len(clips)):
+            fg.append(f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=increase,"
+                      f"crop={w}:{h},fps=30[v{i}]")
+        fg.append("".join(f"[v{i}]" for i in range(len(clips))) +
+                  f"concat=n={len(clips)}:v=1:a=0[vc]")
+        last = "vc"
+        if look and _filters is not None:
+            ch = _filters.chain(*look)
+            if ch:
+                fg.append(f"[vc]{ch}[vl]"); last = "vl"
+        cmd += ["-filter_complex", ";".join(fg), "-map", f"[{last}]"]
+        if voice:
+            cmd += ["-map", f"{len(clips)}:a", "-shortest"]
+        cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(out)]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise Skip(f"ffmpeg failed: {proc.stderr[-200:]}")
+
+    ctx["output"] = str(out)
+    # surface into the brand's shorts folder so the Library/preview sees it
+    if brand is not None:
+        dest = Path(brand.folder("shorts")) / f"{job['id']}.mp4"
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(out, dest)
+            ctx["output"] = str(dest)
+        except OSError:
+            pass
+    return f"final.mp4 -> {Path(ctx['output']).name}"
+
+
+_STEP_FUNCS = {
+    "script": _step_script,
+    "voice": _step_voice,
+    "ingest": _step_ingest,
+    "clips": lambda j, s, b, c: _step_clips(j, s, b, c, kind="text_to_video"),
+    "broll": lambda j, s, b, c: _step_clips(j, s, b, c, kind="image_to_video"),
+    "talking_head": _step_talking_head,
+    "assemble": _step_assemble,
+}
+
+
+def execute(job: Dict[str, Any], brand, hooks: Optional[Dict] = None) -> Dict[str, Any]:
+    """Run a job's steps in order. Each step is best-effort: failures become
+    'skipped: <reason>' so partial progress is preserved and visible."""
+    funcs = dict(_STEP_FUNCS)
+    if hooks:
+        funcs.update(hooks)
     job["status"] = "running"
-    job["step_status"] = {}
-    # NOTE: per-step execution dispatches into router.route / music_video.render
-    # / voice generation. Those require the live local services; until they are
-    # reachable this marks steps as 'skipped (service offline)' rather than
-    # failing the whole job, so the studio still shows the plan + any partials.
+    job.setdefault("step_status", {})
+    job.setdefault("step_notes", {})
+    ctx: Dict[str, Any] = {"dir": _workdir(brand, job["id"])}
+    produced_output = False
     for step in job["plan"]["steps"]:
-        job["step_status"][step["name"]] = "pending"
-    job["status"] = "queued"   # the dashboard worker picks queued jobs up
+        name = step["name"]
+        fn = funcs.get(name)
+        if fn is None:
+            job["step_status"][name] = "skipped: no executor"
+            continue
+        job["step_status"][name] = "running"
+        _save_job(brand, job)
+        try:
+            note = fn(job, _spec_from(job), brand, ctx)
+            job["step_status"][name] = "done"
+            job["step_notes"][name] = note
+        except Skip as e:
+            job["step_status"][name] = f"skipped: {e}"
+        except Exception as e:  # noqa: BLE001 — a bad step shouldn't kill the job
+            job["step_status"][name] = f"error: {e}"
+        _save_job(brand, job)
+
+    if ctx.get("output"):
+        job["output"] = ctx["output"]
+        produced_output = True
+    done = [v for v in job["step_status"].values() if v == "done"]
+    if produced_output:
+        job["status"] = "done"
+    elif done:
+        job["status"] = "partial"
+    else:
+        job["status"] = "skipped"
+    _save_job(brand, job)
     return job
+
+
+def _spec_from(job) -> "JobSpec":
+    d = job["spec"]
+    return JobSpec(**{k: d[k] for k in JobSpec.__dataclass_fields__ if k in d})
+
+
+def _execute_safe(job_id: str, brand) -> None:
+    job = get_job(brand, job_id)
+    if job is None:
+        return
+    try:
+        execute(job, brand)
+    except Exception as e:  # noqa: BLE001
+        job["status"] = "error"
+        job["error"] = str(e)
+        _save_job(brand, job)
+
+
+def process_queue(brand) -> int:
+    """Run every queued job for a brand (for a cron/worker). Returns count run."""
+    n = 0
+    for job in list_jobs(brand):
+        if job.get("status") == "queued":
+            _execute_safe(job["id"], brand)
+            n += 1
+    return n
 
 
 # ──────────────────────────────────────────────────────────────────────────

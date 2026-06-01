@@ -347,8 +347,12 @@ def record_job(brand, job: Dict[str, Any]) -> None:
 
 
 def _save_job(brand, job: Dict[str, Any]) -> None:
-    """Rewrite a job's JSON in place (live progress updates, no jsonl append)."""
-    (_jobs_dir(brand) / f"{job['id']}.json").write_text(json.dumps(job, indent=2))
+    """Rewrite a job's JSON atomically (write temp + os.replace) so a concurrent
+    reader (the Studio polling) never sees a half-written file."""
+    final = _jobs_dir(brand) / f"{job['id']}.json"
+    tmp = final.with_suffix(f".{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(job, indent=2))
+    os.replace(tmp, final)
 
 
 def get_job(brand, job_id: str) -> Optional[Dict[str, Any]]:
@@ -507,11 +511,60 @@ def _step_clips(job, spec, brand, ctx, kind="image_to_video") -> str:
     return f"{len(made)} clip(s)"
 
 
+def _heygen_generate(api_key, tp_id, voice_id, text, w, h, out_path, timeout=600):
+    """Generate a HeyGen talking-photo video, poll until ready, download it."""
+    base = "https://api.heygen.com"
+    body = json.dumps({
+        "video_inputs": [{
+            "character": {"type": "talking_photo", "talking_photo_id": tp_id},
+            "voice": {"type": "text", "input_text": text, "voice_id": voice_id},
+        }],
+        "dimension": {"width": int(w), "height": int(h)},
+    }).encode()
+    req = urllib.request.Request(base + "/v2/video/generate", data=body,
+                                 headers={"X-Api-Key": api_key, "Content-Type": "application/json"},
+                                 method="POST")
+    with urllib.request.urlopen(req, timeout=60) as r:
+        vid = json.loads(r.read()).get("data", {}).get("video_id")
+    if not vid:
+        raise Skip("HeyGen returned no video_id")
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        sreq = urllib.request.Request(base + f"/v1/video_status.get?video_id={vid}",
+                                      headers={"X-Api-Key": api_key})
+        with urllib.request.urlopen(sreq, timeout=30) as r:
+            d = json.loads(r.read()).get("data", {})
+        status = d.get("status")
+        if status == "completed" and d.get("video_url"):
+            with urllib.request.urlopen(d["video_url"], timeout=300) as r:
+                Path(out_path).write_bytes(r.read())
+            return out_path
+        if status == "failed":
+            raise Skip(f"HeyGen render failed: {d.get('error')}")
+        time.sleep(5)
+    raise Skip("HeyGen timed out")
+
+
 def _step_talking_head(job, spec, brand, ctx) -> str:
-    # Avatar adapters (heygen/heygem) plug in here. Until wired, skip cleanly so
-    # the rest of the job (b-roll + assembly) still runs.
-    engine_name = brand.avatar.get("engine") if brand else "heygem"
-    raise Skip(f"avatar engine '{engine_name}' not yet wired (b-roll continues)")
+    """Real avatar generation. Opt-in (SV_ENABLE_AVATAR=1) so it never burns paid
+    credits unexpectedly. Currently wired for HeyGen talking-photo; other engines
+    skip cleanly and the b-roll path continues."""
+    engine_name = (brand.avatar.get("engine") if brand else "heygem") or "heygem"
+    if not os.environ.get("SV_ENABLE_AVATAR"):
+        raise Skip("avatar disabled (set SV_ENABLE_AVATAR=1 to enable)")
+    if engine_name != "heygen":
+        raise Skip(f"avatar engine '{engine_name}' not wired yet (b-roll continues)")
+    key = os.environ.get("HEYGEN_API_KEY", "")
+    tp_id = brand.avatar.get("talking_photo_id") if brand else ""
+    voice_id = brand.avatar.get("heygen_voice_id") if brand else ""
+    if not (key and tp_id and voice_id):
+        raise Skip("HeyGen needs HEYGEN_API_KEY + avatar.talking_photo_id + avatar.heygen_voice_id")
+    w, h = spec.aspect.split("x")
+    out = ctx["dir"] / "talking_head.mp4"
+    _heygen_generate(key, tp_id, voice_id, ctx.get("script_text", spec.topic or ""),
+                     w, h, str(out))
+    ctx["talking_head"] = str(out)
+    return f"talking_head.mp4 ({out.stat().st_size // 1024}KB)"
 
 
 def _step_assemble(job, spec, brand, ctx) -> str:
@@ -532,6 +585,21 @@ def _step_assemble(job, spec, brand, ctx) -> str:
                          cut=spec.cut, look=look, size=spec.aspect, run=True, ffmpeg=ff)
         if not res.get("ok"):
             raise Skip(f"ffmpeg failed: {res.get('error', '')[:200]}")
+    elif ctx.get("talking_head"):
+        # Avatar short: the HeyGen clip carries its own voice. Apply the look and
+        # ship it (b-roll splicing onto the avatar track is a follow-up).
+        head = ctx["talking_head"]
+        w, h = spec.aspect.split("x")
+        vf = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}"
+        if look and _filters is not None:
+            ch = _filters.chain(*look)
+            if ch:
+                vf += "," + ch
+        cmd = [ff, "-y", "-i", head, "-vf", vf, "-c:v", "libx264",
+               "-pix_fmt", "yuv420p", "-c:a", "aac", str(out)]
+        proc = subprocess.run(cmd, capture_output=True, text=True)
+        if proc.returncode != 0:
+            raise Skip(f"ffmpeg failed: {proc.stderr[-200:]}")
     else:
         clips = ctx.get("clips") or []
         if not clips:
@@ -643,16 +711,24 @@ def _spec_from(job) -> "JobSpec":
     return JobSpec(**{k: d[k] for k in JobSpec.__dataclass_fields__ if k in d})
 
 
+# Cap how many builds run at once so a burst of Builds can't spawn unlimited
+# parallel ffmpeg/ComfyUI processes. Extra jobs wait their turn (status stays
+# 'queued' until a slot frees up).
+_JOB_SEMAPHORE = threading.Semaphore(int(os.environ.get("SV_MAX_CONCURRENT_JOBS", "2")))
+
+
 def _execute_safe(job_id: str, brand) -> None:
     job = get_job(brand, job_id)
     if job is None:
         return
-    try:
-        execute(job, brand)
-    except Exception as e:  # noqa: BLE001
-        job["status"] = "error"
-        job["error"] = str(e)
-        _save_job(brand, job)
+    with _JOB_SEMAPHORE:
+        job = get_job(brand, job_id) or job   # re-read in case it changed while queued
+        try:
+            execute(job, brand)
+        except Exception as e:  # noqa: BLE001
+            job["status"] = "error"
+            job["error"] = str(e)
+            _save_job(brand, job)
 
 
 def process_queue(brand) -> int:

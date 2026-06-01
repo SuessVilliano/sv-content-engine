@@ -6,15 +6,36 @@ day of content costs cents, not hundreds.
 ## Run it
 
 ```
+pip install -r requirements.txt   # flask is the only hard requirement
+cp .env.example .env              # fill in keys; .env is gitignored
+set -a; source .env; set +a       # load them
+
 python3 launch.py            # preflight every service, then boot the Studio
 python3 launch.py --check    # just check what's up / what to start
-python3 launch.py --port 5000
+python3 launch.py --lan      # expose on the LAN (requires SV_DASHBOARD_TOKEN)
 ```
 
 `launch.py` checks Flask, VoxCPM (:8808), ComfyUI (:8188) + workflows, ffmpeg,
 and librosa/whisper, prints exactly what to start for anything offline, then
 boots the dashboard at http://localhost:4444. Anything missing degrades
 gracefully — the Studio always runs; only that one capability waits.
+
+### Security
+- **Secrets live in the environment**, never in source (see `.env.example`).
+  Any key that was ever committed should be rotated.
+- The dashboard **binds to `127.0.0.1` by default**. To reach it from another
+  device use `--lan`, which *requires* `SV_DASHBOARD_TOKEN` — without auth,
+  anyone on the network could spend your generation credits or post to your
+  socials. Requests then pass the token via `X-SV-Token` header or `?token=`.
+- File-serving routes are path-traversal guarded; uploads are size-capped
+  (`SV_MAX_UPLOAD_MB`, default 300) and concurrency-capped
+  (`SV_MAX_CONCURRENT_JOBS`, default 2).
+
+### Tests
+
+```
+python3 -m pytest        # 40 tests: parse/plan/execute, beat-edit, looks, auth, traversal
+```
 
 
 ```
@@ -99,3 +120,10 @@ Hit **Plan** to see the steps + exact cost for free. Hit **Build** to produce it
 `/api/job/<id>` every 4s while running). The final video is copied into the
 brand's `shorts_reels/` so the Library tab sees it too. A queued-job worker
 (`engine.process_queue`) is available for cron/headless runs.
+
+The **talking-head** step is wired for HeyGen (talking-photo → poll → download,
+composited as the short's lead visual). It's opt-in: set `SV_ENABLE_AVATAR=1`
+plus the brand's `avatar.talking_photo_id` and `avatar.heygen_voice_id`, so it
+never spends credits unless you ask. Offline/disabled, it skips and the b-roll
+path continues. *(Live HeyGen calls haven't been validated end-to-end yet —
+test with one short before batching.)*

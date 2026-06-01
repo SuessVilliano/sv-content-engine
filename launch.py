@@ -138,6 +138,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="launch.py", description="Boot the SV Studio.")
     ap.add_argument("--check", action="store_true", help="run preflight only, don't boot")
     ap.add_argument("--port", type=int, default=4444, help="dashboard port (default 4444)")
+    ap.add_argument("--lan", action="store_true",
+                    help="bind 0.0.0.0 so other devices can reach it (needs SV_DASHBOARD_TOKEN)")
     args = ap.parse_args(argv)
 
     ready = preflight()
@@ -153,10 +155,16 @@ def main(argv=None) -> int:
 
     os.chdir(ROOT)
     import dashboard
+    host = "0.0.0.0" if args.lan else "127.0.0.1"
+    if args.lan and not os.environ.get("SV_DASHBOARD_TOKEN"):
+        print(f"  {BAD} --lan needs SV_DASHBOARD_TOKEN set (anyone could spend your "
+              f"credits / post to your socials). Aborting.\n")
+        return 1
     url = f"http://localhost:{args.port}"
-    print(f"  {OK} Booting Studio → {B}{url}{END}\n")
+    where = "LAN (0.0.0.0)" if args.lan else "localhost only"
+    print(f"  {OK} Booting Studio → {B}{url}{END}  {DIM}[{where}]{END}\n")
     try:
-        dashboard.app.run(host="0.0.0.0", port=args.port, debug=False)
+        dashboard.app.run(host=host, port=args.port, debug=False)
     except KeyboardInterrupt:
         print(f"\n  {DIM}Studio stopped.{END}\n")
     return 0

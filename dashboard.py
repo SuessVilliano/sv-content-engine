@@ -5,12 +5,23 @@ Run: python3 dashboard.py
 Open: http://localhost:4444
 """
 import os, json, subprocess, threading, urllib.request
-from flask import Flask, send_file, jsonify, render_template_string, request
+from flask import Flask, send_file, jsonify, render_template_string, request, abort
 from pathlib import Path
 from datetime import datetime
 
 # Generation status tracker
 GEN_STATUS = {}  # day_num -> {"status": "generating|done|error", "message": "..."}
+
+_MISSING_SECRETS = []
+def _secret(name: str, default: str = "") -> str:
+    """Read a credential from the environment. Never hardcode secrets in source —
+    set them in the shell / .env. Missing ones are collected and warned about once
+    at startup so a feature that needs them fails loudly, not silently."""
+    val = os.environ.get(name, default)
+    if not val:
+        _MISSING_SECRETS.append(name)
+    return val
+
 
 # ── Multi-brand config layer ────────────────────────────────────────────
 # The active brand (brands/_active.json or $SV_BRAND) drives all paths, voice,
@@ -71,6 +82,32 @@ def generate_voice_async(day_num, script_text):
         print(f"[Voice] Day {day_num} error: {e}")
 
 app = Flask(__name__)
+# cap uploads (songs/videos) so a huge POST can't fill the disk
+app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("SV_MAX_UPLOAD_MB", "300")) * 1024 * 1024
+
+# ── Auth ────────────────────────────────────────────────────────────────
+# If SV_DASHBOARD_TOKEN is set, every request must present it (header
+# X-SV-Token or ?token=). Required when binding to a LAN; harmless on
+# localhost. Without a token the dashboard can trigger paid generation and
+# publish to socials, so set one before exposing it beyond 127.0.0.1.
+SV_TOKEN = os.environ.get("SV_DASHBOARD_TOKEN", "")
+
+@app.before_request
+def _require_token():
+    if not SV_TOKEN:
+        return
+    sent = request.headers.get("X-SV-Token") or request.args.get("token", "")
+    if sent != SV_TOKEN:
+        abort(401)
+
+def _safe_path(base: str, *parts: str):
+    """Join under `base` and confirm the result stays inside it. Returns the
+    resolved path, or None on traversal (e.g. '../../etc/passwd')."""
+    base_r = os.path.realpath(base)
+    p = os.path.realpath(os.path.join(base_r, *parts))
+    if p != base_r and not p.startswith(base_r + os.sep):
+        return None
+    return p
 
 if BRAND is not None:
     BASE    = str(BRAND.base_dir)
@@ -87,8 +124,17 @@ else:
     SCRIPTS = f"{BASE}/scripts"
     DRAFTS  = f"{BASE}/drafts"
 THUMBS  = "/tmp/sv_dashboard_thumbs"
-FFMPEG  = "/opt/homebrew/bin/ffmpeg"
-FFPROBE = "/opt/homebrew/bin/ffprobe"
+
+def _find_bin(name: str) -> str:
+    import shutil as _sh
+    for c in (os.environ.get(name.upper()), f"/opt/homebrew/bin/{name}",
+              f"/usr/bin/{name}", name):
+        if c and (_sh.which(c) or os.path.exists(c)):
+            return c
+    return name  # fall back to PATH lookup at call time
+
+FFMPEG  = _find_bin("ffmpeg")
+FFPROBE = _find_bin("ffprobe")
 
 for d in [THUMBS, DRAFTS]:
     os.makedirs(d, exist_ok=True)
@@ -110,7 +156,7 @@ def make_thumb(video_path, thumb_path):
         subprocess.run([FFMPEG,"-y","-i",video_path,"-ss","0.5","-vframes","1",
                         "-vf","scale=360:-1",thumb_path], capture_output=True, timeout=10)
         return os.path.exists(thumb_path)
-    except: return False
+    except Exception: return False
 
 def list_drafts():
     """List pending script drafts awaiting review"""
@@ -1342,10 +1388,12 @@ def api_upload_song():
         return jsonify({"ok": False, "error": "not an audio file"}), 400
     beats_dir = str(BRAND.folder("beats")) if BRAND is not None else "uploads"
     os.makedirs(beats_dir, exist_ok=True)
-    dest = os.path.join(beats_dir, name)
+    dest = _safe_path(beats_dir, name)
+    if not dest:
+        return jsonify({"ok": False, "error": "bad filename"}), 400
     f.save(dest)
     res = engine.ingest_song(BRAND, dest)
-    return jsonify(res), (200 if res.get("ok") else 200)
+    return jsonify(res), (200 if res.get("ok") else 422)
 
 @app.route("/api/looks")
 def api_looks():
@@ -1369,7 +1417,7 @@ def api_edit():
     res = engine.rerender(BRAND, job_id, order=d.get("order"),
                           look=d.get("look"), cut=d.get("cut"),
                           every=int(d.get("every", 1)))
-    return jsonify(res), (200 if res.get("ok") else 200)
+    return jsonify(res), (200 if res.get("ok") else 422)
 
 @app.route("/api/videos")
 def api_videos():
@@ -1389,34 +1437,34 @@ def api_drafts():
 
 @app.route("/stream/videos/<name>")
 def stream_video(name):
-    p = os.path.join(SHORTS, name)
-    if not os.path.exists(p): return "Not found", 404
+    p = _safe_path(SHORTS, name)
+    if not p or not os.path.exists(p): return "Not found", 404
     return send_file(p, mimetype="video/mp4", conditional=True)
 
 @app.route("/stream/voice/<name>")
 def stream_voice(name):
-    p = os.path.join(VOICE, name)
-    if not os.path.exists(p): return "Not found", 404
+    p = _safe_path(VOICE, name)
+    if not p or not os.path.exists(p): return "Not found", 404
     return send_file(p, mimetype="audio/wav" if name.endswith(".wav") else "audio/mpeg", conditional=True)
 
 @app.route("/stream/beats/<name>")
 def stream_beat(name):
-    p = os.path.join(BEATS, name)
-    if not os.path.exists(p): return "Not found", 404
+    p = _safe_path(BEATS, name)
+    if not p or not os.path.exists(p): return "Not found", 404
     return send_file(p, mimetype="audio/mpeg", conditional=True)
 
 @app.route("/thumb/<name>")
 def thumb(name):
-    vp = os.path.join(SHORTS, name)
-    tp = os.path.join(THUMBS, name.replace(".mp4", ".jpg"))
-    if not os.path.exists(vp): return "Not found", 404
+    vp = _safe_path(SHORTS, name)
+    tp = _safe_path(THUMBS, name.replace(".mp4", ".jpg"))
+    if not vp or not tp or not os.path.exists(vp): return "Not found", 404
     make_thumb(vp, tp)
     if os.path.exists(tp): return send_file(tp, mimetype="image/jpeg")
     return "No thumb", 404
 
-GHL_LOCATION_ID = "alK3nxmaA2aXkCGUQlUT"
-GHL_PIT_TOKEN   = "pit-33dcb1f3-6ddd-4188-97f9-1504518f6e39"
-GHL_USER_ID     = "69dfa1a7ac74e91e82eca6d6"
+GHL_LOCATION_ID = os.environ.get("GHL_LOCATION_ID", "alK3nxmaA2aXkCGUQlUT")
+GHL_PIT_TOKEN   = _secret("GHL_PIT_TOKEN")
+GHL_USER_ID     = os.environ.get("GHL_USER_ID", "69dfa1a7ac74e91e82eca6d6")
 GHL_SOCIAL_API  = f"https://services.leadconnectorhq.com/social-media-posting/{GHL_LOCATION_ID}/posts"
 GHL_UPLOAD_URL  = f"https://services.leadconnectorhq.com/medias/upload-file?locationId={GHL_LOCATION_ID}"
 
@@ -1428,9 +1476,9 @@ GHL_ACCOUNTS = [
     "69e13b37dc821ca23dbec6e6_alK3nxmaA2aXkCGUQlUT_000xyOrgq0S2obmqX8erjAFAQ3DruitgSfv_profile",  # Hybrid Funding TikTok
 ]
 
-R2_ACCOUNT_ID        = "3289e13e9aedd43be7ffe8629c0296c8"
-R2_ACCESS_KEY_ID     = "7ef6048224ddc42d16541cd67716cd91"
-R2_SECRET_ACCESS_KEY = "cfut_RqhkEXOYcddpcMGPxH16MwFS1FTRqXHHGQKNLkbt595bf070"
+R2_ACCOUNT_ID        = os.environ.get("R2_ACCOUNT_ID", "3289e13e9aedd43be7ffe8629c0296c8")
+R2_ACCESS_KEY_ID     = _secret("R2_ACCESS_KEY_ID")
+R2_SECRET_ACCESS_KEY = _secret("R2_SECRET_ACCESS_KEY")
 R2_BUCKET            = "sv-content-engine"
 R2_ENDPOINT          = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
@@ -1617,8 +1665,8 @@ def api_approve_draft():
     name    = data.get("name", "")
 
     # Find the script file
-    script_path = os.path.join(SCRIPTS, name)
-    if not os.path.exists(script_path):
+    script_path = _safe_path(SCRIPTS, name)
+    if not script_path or not os.path.exists(script_path):
         return jsonify({"error": f"Script file not found: {name}"}), 404
 
     with open(script_path) as f:
@@ -1673,8 +1721,8 @@ def api_approve_draft():
 def api_gen_status():
     return jsonify(GEN_STATUS)
 
-FAL_API_KEY    = "d8d27e53-7a69-4ea4-a16f-284e97caa9fe:12c01f980a45fdffad46a3cdb6e8f312"
-HEYGEN_API_KEY = "sk_V2_hgu_k9GvV8Bbud0_BeD4VvnSwIgNO8ECptMC0BHmBZqnSpUv"
+FAL_API_KEY    = _secret("FAL_API_KEY")
+HEYGEN_API_KEY = _secret("HEYGEN_API_KEY")
 BROLL_DIR      = os.path.join(BASE, "broll_library")
 MASTERS_DIR    = os.path.join(BASE, "masters")
 
@@ -1689,7 +1737,7 @@ def api_engine_status():
         d = json.loads(r.read())
         model = d.get("model", "VoxCPM")
         results.append({"name": "VoxCPM H1", "detail": f"{model} · Harrahs voice · Port 8808", "status": "live", "badge": "LIVE"})
-    except:
+    except Exception:
         results.append({"name": "VoxCPM H1", "detail": "Port 8808 — not running", "status": "error", "badge": "OFFLINE"})
 
     # 2. fal.ai — check account balance
@@ -1735,7 +1783,7 @@ def api_engine_status():
     try:
         r = subprocess.run(["whisper", "--help"], capture_output=True, timeout=3)
         whisper_ok = True
-    except:
+    except Exception:
         pass
     results.append({"name": "Whisper Subs", "detail": "Word-level sync · Auto-burn", "status": "live" if whisper_ok else "warn", "badge": "LIVE" if whisper_ok else "CHECK"})
 
@@ -1743,7 +1791,7 @@ def api_engine_status():
     try:
         files_count = len([f for f in os.listdir(SHORTS) if f.endswith(".mp4")]) if os.path.exists(SHORTS) else 0
         results.append({"name": "Cloudflare R2", "detail": f"sv-content-engine · {files_count} finals", "status": "live", "badge": "LIVE"})
-    except:
+    except Exception:
         results.append({"name": "Cloudflare R2", "detail": "sv-content-engine bucket", "status": "live", "badge": "LIVE"})
 
     # 6. YouTube / Composio
@@ -1781,14 +1829,14 @@ def api_masters():
 
 @app.route("/stream/broll/<path:rel_path>")
 def stream_broll(rel_path):
-    p = os.path.join(BROLL_DIR, rel_path)
-    if not os.path.exists(p): return "Not found", 404
+    p = _safe_path(BROLL_DIR, rel_path)
+    if not p or not os.path.exists(p): return "Not found", 404
     return send_file(p, mimetype="video/mp4", conditional=True)
 
 @app.route("/stream/masters/<name>")
 def stream_masters(name):
-    p = os.path.join(MASTERS_DIR, name)
-    if not os.path.exists(p): return "Not found", 404
+    p = _safe_path(MASTERS_DIR, name)
+    if not p or not os.path.exists(p): return "Not found", 404
     return send_file(p, mimetype="video/mp4", conditional=True)
 
 # ── SCHEDULE TAB ROUTES ────────────────────────────────────────────────────────
@@ -1882,10 +1930,20 @@ def api_schedule_post():
         "message": f"Day {day} scheduled for {schedule_utc} across all 4 platforms ✅",
     })
 
-if __name__ == "__main__":
+def run(host=None, port=None):
+    host = host or os.environ.get("SV_HOST", "127.0.0.1")
+    port = int(port or os.environ.get("SV_PORT", "4444"))
     print("\n" + "="*50)
     print("  SV CONTENT ENGINE — Dashboard v2")
     print("  Mobile-optimized · Draft workflow live")
-    print("  Open: http://localhost:4444")
+    print(f"  Open: http://localhost:{port}")
+    if _MISSING_SECRETS:
+        print(f"  ⚠️  missing secrets (features disabled): {', '.join(sorted(set(_MISSING_SECRETS)))}")
+        print("     set them in your shell/.env — see .env.example")
+    if host != "127.0.0.1" and not SV_TOKEN:
+        print("  ⚠️  bound beyond localhost with NO auth token — set SV_DASHBOARD_TOKEN!")
     print("="*50 + "\n")
-    app.run(host="0.0.0.0", port=4444, debug=False)
+    app.run(host=host, port=port, debug=False)
+
+if __name__ == "__main__":
+    run()

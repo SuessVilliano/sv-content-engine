@@ -619,6 +619,14 @@ def execute(job: Dict[str, Any], brand, hooks: Optional[Dict] = None) -> Dict[st
     if ctx.get("output"):
         job["output"] = ctx["output"]
         produced_output = True
+    # persist artifacts so the in-platform editor can re-cut/re-render later
+    job["artifacts"] = {
+        "clips": ctx.get("clips") or [],
+        "song_json": str(ctx["dir"] / "song.json") if ctx.get("song") else None,
+        "song_path": ctx.get("song_path"),
+        "voice": ctx.get("voice"),
+        "output": ctx.get("output"),
+    }
     done = [v for v in job["step_status"].values() if v == "done"]
     if produced_output:
         job["status"] = "done"
@@ -655,6 +663,97 @@ def process_queue(brand) -> int:
             _execute_safe(job["id"], brand)
             n += 1
     return n
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Drop-a-song upload  &  in-platform editor (re-cut / re-order / re-look)
+# ──────────────────────────────────────────────────────────────────────────
+LOOK_NAMES = sorted(_filters.LOOKS.keys()) if _filters else []
+CUT_MODES = ["downbeat", "beat", "bars", "seconds"]
+
+
+def ingest_song(brand, audio_path: str) -> Dict[str, Any]:
+    """Analyse an uploaded song (beat + lyrics) and stash song.json beside it in
+    the brand's beats folder. Returns a summary the Studio renders immediately.
+    Degrades gracefully when librosa/whisper aren't installed."""
+    if _mv is None:
+        return {"ok": False, "error": "music_video module unavailable"}
+    name = os.path.basename(audio_path)
+    out_json = str(Path(audio_path).with_suffix(".song.json"))
+    try:
+        song = _mv.ingest(audio_path, out_json)
+    except _mv.MissingDependency as e:
+        return {"ok": False, "name": name, "error": str(e),
+                "hint": "pip install librosa openai-whisper"}
+    lyrics = song.get("lyrics", [])
+    return {
+        "ok": True, "name": name, "song_json": out_json,
+        "tempo": song.get("tempo"), "beats": len(song.get("beats", [])),
+        "sections": len(song.get("sections", [])), "lyrics": len(lyrics),
+        "lyric_preview": " / ".join(l["text"] for l in lyrics[:3]),
+    }
+
+
+def rerender(brand, job_id: str, order: Optional[List[int]] = None,
+             look: Optional[List[str]] = None, cut: Optional[str] = None,
+             every: int = 1) -> Dict[str, Any]:
+    """Re-cut an already-built music video: reorder clips, swap the look, change
+    the beat-cut mode, and re-render. Returns the updated job (or an error)."""
+    job = get_job(brand, job_id)
+    if job is None:
+        return {"ok": False, "error": "job not found"}
+    if job.get("spec", {}).get("kind") != "music_video":
+        return {"ok": False, "error": "editor only supports music videos"}
+    art = job.get("artifacts") or {}
+    clips, song_json, audio = art.get("clips"), art.get("song_json"), art.get("song_path")
+    if not (clips and song_json and audio):
+        return {"ok": False, "error": "this job has no clips/song to re-cut yet"}
+    if _mv is None:
+        return {"ok": False, "error": "music_video module unavailable"}
+
+    if order:  # reorder / drop clips by index
+        try:
+            clips = [clips[i] for i in order if 0 <= i < len(clips)]
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "bad clip order"}
+    if not clips:
+        return {"ok": False, "error": "no clips left after reorder"}
+
+    spec = job["spec"]
+    look = look if look is not None else spec.get("looks")
+    cut = cut or spec.get("cut", "downbeat")
+    try:
+        song = json.loads(Path(song_json).read_text())
+    except (OSError, json.JSONDecodeError) as e:
+        return {"ok": False, "error": f"can't read song.json ({e})"}
+
+    out = _workdir(brand, job_id) / f"edit_{int(time.time())}.mp4"
+    ff = _ffmpeg()
+    res = _mv.render(song, clips, audio, str(out), cut=cut, every=every,
+                     look=look or None, size=spec.get("aspect", "1080x1920"),
+                     run=True, ffmpeg=ff)
+    if not res.get("ok"):
+        return {"ok": False, "error": (res.get("error") or "ffmpeg failed")[:300]}
+
+    final = str(out)
+    if brand is not None:
+        dest = Path(brand.folder("shorts")) / f"{job_id}.mp4"
+        try:
+            shutil.copy2(out, dest); final = str(dest)
+        except OSError:
+            pass
+    job["output"] = final
+    job["artifacts"]["output"] = final
+    job["artifacts"]["clips"] = clips
+    spec["looks"] = look or []
+    spec["cut"] = cut
+    job.setdefault("edits", []).append({
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "cut": cut, "every": every,
+        "look": look or [], "clips": len(clips), "out": Path(final).name,
+    })
+    job["status"] = "done"
+    _save_job(brand, job)
+    return {"ok": True, "job": job}
 
 
 # ──────────────────────────────────────────────────────────────────────────

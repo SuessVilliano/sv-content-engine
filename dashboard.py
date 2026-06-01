@@ -227,6 +227,16 @@ HTML = r"""<!DOCTYPE html>
   <!-- STUDIO TAB — natural-language command bar -->
   <div id="tab-content-studio" class="tab-content">
     <div class="max-w-3xl mx-auto">
+      <!-- drop-a-song -->
+      <div id="dropzone" class="rounded-2xl p-5 mb-4 text-center cursor-pointer transition-all"
+           style="border:1.5px dashed #2A2A3C;background:rgba(201,168,76,.03)"
+           onclick="document.getElementById('song-file').click()">
+        <p class="text-[13px] font-bold" style="color:#C9A84C">🎵 Drop a song to make a music video</p>
+        <p class="text-[11px] mt-1" style="color:#555">MP3 / WAV — I'll find the beat & lyrics, then build to the beat</p>
+        <input type="file" id="song-file" accept="audio/*" class="hidden" onchange="uploadSong(this.files[0])">
+      </div>
+      <div id="song-result" class="hidden card rounded-2xl p-4 mb-4"></div>
+
       <div class="card rounded-2xl p-4 md:p-5 mb-5">
         <p class="text-[11px] font-bold mb-2" style="color:#C9A84C;letter-spacing:.12em">✨ TYPE WHAT YOU WANT · IT BUILDS IT</p>
         <textarea id="cmd-input" rows="2"
@@ -444,9 +454,39 @@ HTML = r"""<!DOCTYPE html>
   </div>
 </div>
 
+<!-- IN-PLATFORM EDITOR -->
+<div id="editor-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,.7)">
+  <div class="card rounded-2xl p-5 w-full max-w-lg" style="max-height:90vh;overflow-y:auto">
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-[13px] font-black" style="color:#C9A84C">✂️ EDIT · re-cut to the beat</p>
+      <button onclick="closeEditor()" class="text-sm" style="color:#666">✕</button>
+    </div>
+    <p class="text-[10px] font-bold mb-1" style="color:#555">CLIP ORDER — drag to reorder, ✕ to drop</p>
+    <div id="editor-clips" class="space-y-1 mb-3"></div>
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <div>
+        <p class="text-[10px] font-bold mb-1" style="color:#555">CUT</p>
+        <select id="editor-cut" class="w-full rounded-lg px-2 py-2 text-[12px] bg-black/30 border" style="border-color:#2A2A3C;color:#ddd"></select>
+      </div>
+      <div>
+        <p class="text-[10px] font-bold mb-1" style="color:#555">EVERY (n beats/bars)</p>
+        <input id="editor-every" type="number" min="1" value="1" class="w-full rounded-lg px-2 py-2 text-[12px] bg-black/30 border" style="border-color:#2A2A3C;color:#ddd">
+      </div>
+    </div>
+    <p class="text-[10px] font-bold mb-1" style="color:#555">LOOK — tap to toggle (stacks)</p>
+    <div id="editor-looks" class="flex flex-wrap gap-1.5 mb-4"></div>
+    <div class="flex gap-3">
+      <button onclick="closeEditor()" class="flex-1 py-2.5 rounded-xl text-[13px] font-bold" style="border:1px solid #1E1E2E;color:rgba(255,255,255,.4)">Cancel</button>
+      <button onclick="submitEdit()" id="editor-go" class="flex-1 py-2.5 rounded-xl text-[13px] font-black" style="background:#C9A84C;color:#0A0A0F">Re-render</button>
+    </div>
+    <p id="editor-msg" class="text-[11px] mt-2 text-center" style="color:#777"></p>
+  </div>
+</div>
+
 <script>
 let currentFile = null;
 let allVideos = [], allVoice = [], allBeats = [], allDrafts = [];
+let editorState = { job: null, clips: [], look: [], looks: [], cuts: [] };
 
 // ── TABS ─────────────────────────────────────────────────────
 function showTab(name) {
@@ -743,7 +783,12 @@ async function loadJobs() {
           }).join('') + '</div>'
         : '';
       const preview = (j.status === 'done' && j.output)
-        ? '<video src="/stream/job/'+j.id+'" controls preload="metadata" class="w-full rounded-lg mt-2" style="max-height:240px;background:#000"></video>'
+        ? '<video src="/stream/job/'+j.id+'?t='+(j.edits?j.edits.length:0)+'" controls preload="metadata" class="w-full rounded-lg mt-2" style="max-height:240px;background:#000"></video>'
+        : '';
+      const canEdit = s.kind === 'music_video' && j.artifacts
+        && (j.artifacts.clips||[]).length && j.artifacts.song_json;
+      const editBtn = canEdit
+        ? '<button onclick=\'openEditor("'+j.id+'")\' class="text-[11px] font-bold px-2.5 py-1 rounded-lg mt-2" style="background:#1A1A28;color:#C9A84C">✂️ Edit · re-cut</button>'
         : '';
       const card = document.createElement('div');
       card.className = 'card rounded-xl p-3';
@@ -753,13 +798,113 @@ async function loadJobs() {
         +   (j.status||'').toUpperCase()+' · '+s.kind.replace("_"," ")+'</span>'
         + '<span class="text-[11px]" style="color:#666">'+(c>0?'$'+c:'free')+'</span></div>'
         + '<p class="text-sm" style="color:#ddd">'+(s.prompt||'').slice(0,120)+'</p>'
-        + steps + preview
+        + steps + preview + editBtn
         + '<p class="text-[10px] mt-1" style="color:#555">'+j.id+'</p>';
       list.appendChild(card);
     });
     // while anything is running, poll faster so progress feels live
     if (anyRunning) { clearTimeout(window._jobPoll); window._jobPoll = setTimeout(loadJobs, 4000); }
   } catch(e) { console.error(e); }
+}
+
+// ── DROP-A-SONG ───────────────────────────────────────────────
+async function uploadSong(file) {
+  if (!file) return;
+  const box = document.getElementById('song-result');
+  box.classList.remove('hidden');
+  box.innerHTML = '<p class="text-xs" style="color:#888">Analysing '+file.name+' — finding beat & lyrics…</p>';
+  try {
+    const fd = new FormData(); fd.append('song', file);
+    const r = await fetch('/api/upload-song', { method:'POST', body: fd }).then(x=>x.json());
+    if (!r.ok) {
+      box.innerHTML = '<p class="text-xs text-red-400">'+(r.error||'upload failed')+'</p>'
+        + (r.hint? '<p class="text-[11px] mt-1" style="color:#666">Tip: '+r.hint+'</p>':'');
+      return;
+    }
+    box.innerHTML =
+      '<p class="text-[12px] font-bold" style="color:#4ADE80">✓ '+r.name+' analysed</p>'
+      + '<div class="flex flex-wrap gap-3 mt-2 text-[12px]" style="color:#bbb">'
+      +   '<span>🥁 '+(r.tempo||'?')+' BPM</span><span>· '+r.beats+' beats</span>'
+      +   '<span>· '+r.sections+' sections</span><span>· '+r.lyrics+' lyric lines</span></div>'
+      + (r.lyric_preview? '<p class="text-[11px] mt-2 italic" style="color:#888">"'+r.lyric_preview+'…"</p>':'')
+      + '<button onclick=\'buildSong("'+r.name+'")\' class="mt-3 px-4 py-2 rounded-xl text-[13px] font-black" style="background:#C9A84C;color:#0A0A0F">🎬 Build music video to the beat</button>';
+  } catch(e) { box.innerHTML = '<p class="text-xs text-red-400">'+e+'</p>'; }
+}
+function buildSong(name) {
+  document.getElementById('cmd-input').value = 'music video for '+name+', cut on the beat';
+  runCommand(false);
+}
+// dropzone drag styling
+(function(){
+  const dz = document.getElementById('dropzone'); if (!dz) return;
+  ['dragover','dragenter'].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); dz.style.borderColor = '#C9A84C'; dz.style.background = 'rgba(201,168,76,.08)';
+  }));
+  ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); dz.style.borderColor = '#2A2A3C'; dz.style.background = 'rgba(201,168,76,.03)';
+  }));
+  dz.addEventListener('drop', e => { if (e.dataTransfer.files[0]) uploadSong(e.dataTransfer.files[0]); });
+})();
+
+// ── IN-PLATFORM EDITOR ────────────────────────────────────────
+async function openEditor(jobId) {
+  const job = await fetch('/api/job/'+jobId).then(r=>r.json());
+  const opt = await fetch('/api/looks').then(r=>r.json());
+  editorState.job = job;
+  editorState.looks = opt.looks || []; editorState.cuts = opt.cuts || [];
+  editorState.clips = (job.artifacts.clips||[]).map((c,i)=>({i, name:c.split('/').pop()}));
+  editorState.look = (job.spec.looks||[]).slice();
+  // cut select
+  const cutSel = document.getElementById('editor-cut');
+  cutSel.innerHTML = editorState.cuts.map(c=>'<option'+(c===job.spec.cut?' selected':'')+'>'+c+'</option>').join('');
+  // looks toggles
+  document.getElementById('editor-looks').innerHTML = editorState.looks.map(l=>{
+    const on = editorState.look.includes(l);
+    return '<button data-look="'+l+'" onclick="toggleLook(this)" class="text-[11px] px-2 py-1 rounded-lg" style="background:'+(on?'#C9A84C':'#1A1A28')+';color:'+(on?'#0A0A0F':'#999')+'">'+l+'</button>';
+  }).join('');
+  document.getElementById('editor-msg').textContent = '';
+  renderEditorClips();
+  document.getElementById('editor-modal').classList.remove('hidden');
+}
+function renderEditorClips() {
+  const box = document.getElementById('editor-clips');
+  box.innerHTML = editorState.clips.map((c,pos)=>
+    '<div class="flex items-center gap-2 rounded-lg px-2 py-1.5" style="background:#1A1A28">'
+    + '<span class="text-[11px] font-bold" style="color:#C9A84C">'+(pos+1)+'</span>'
+    + '<span class="text-[11px] flex-1 truncate" style="color:#bbb">'+c.name+'</span>'
+    + '<button onclick="moveClip('+pos+',-1)" class="text-[12px] px-1" style="color:#666">↑</button>'
+    + '<button onclick="moveClip('+pos+',1)" class="text-[12px] px-1" style="color:#666">↓</button>'
+    + '<button onclick="dropClip('+pos+')" class="text-[12px] px-1" style="color:#F87171">✕</button></div>'
+  ).join('') || '<p class="text-[11px]" style="color:#F87171">No clips left — drop fewer.</p>';
+}
+function moveClip(pos, dir) {
+  const t = pos + dir; if (t<0 || t>=editorState.clips.length) return;
+  const a = editorState.clips;[a[pos],a[t]]=[a[t],a[pos]]; renderEditorClips();
+}
+function dropClip(pos) { editorState.clips.splice(pos,1); renderEditorClips(); }
+function toggleLook(btn) {
+  const l = btn.dataset.look, i = editorState.look.indexOf(l);
+  if (i>=0) editorState.look.splice(i,1); else editorState.look.push(l);
+  const on = editorState.look.includes(l);
+  btn.style.background = on?'#C9A84C':'#1A1A28'; btn.style.color = on?'#0A0A0F':'#999';
+}
+function closeEditor() { document.getElementById('editor-modal').classList.add('hidden'); }
+async function submitEdit() {
+  const go = document.getElementById('editor-go'), msg = document.getElementById('editor-msg');
+  if (!editorState.clips.length) { msg.textContent='Keep at least one clip.'; return; }
+  go.disabled = true; msg.textContent = 'Re-rendering to the beat…';
+  try {
+    const r = await fetch('/api/edit', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        job_id: editorState.job.id,
+        order: editorState.clips.map(c=>c.i),
+        look: editorState.look,
+        cut: document.getElementById('editor-cut').value,
+        every: parseInt(document.getElementById('editor-every').value)||1,
+      })}).then(x=>x.json());
+    if (!r.ok) { msg.textContent = '✕ '+(r.error||'failed'); return; }
+    msg.textContent = '✓ Re-rendered'; closeEditor(); loadJobs();
+  } catch(e) { msg.textContent = '✕ '+e; } finally { go.disabled = false; }
 }
 
 // ── VIDEOS ────────────────────────────────────────────────────
@@ -1181,6 +1326,50 @@ def stream_job_file(job_id):
     except Exception:  # noqa: BLE001
         pass
     return ("not found", 404)
+
+@app.route("/api/upload-song", methods=["POST"])
+def api_upload_song():
+    """Drag-drop an MP3 -> save into beats/ -> analyse beat + lyrics -> summary."""
+    try:
+        import engine
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"engine unavailable: {e}"}), 500
+    f = request.files.get("song")
+    if f is None or not f.filename:
+        return jsonify({"ok": False, "error": "no file"}), 400
+    name = os.path.basename(f.filename)
+    if not name.lower().endswith((".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg")):
+        return jsonify({"ok": False, "error": "not an audio file"}), 400
+    beats_dir = str(BRAND.folder("beats")) if BRAND is not None else "uploads"
+    os.makedirs(beats_dir, exist_ok=True)
+    dest = os.path.join(beats_dir, name)
+    f.save(dest)
+    res = engine.ingest_song(BRAND, dest)
+    return jsonify(res), (200 if res.get("ok") else 200)
+
+@app.route("/api/looks")
+def api_looks():
+    try:
+        import engine
+        return jsonify({"looks": engine.LOOK_NAMES, "cuts": engine.CUT_MODES})
+    except Exception:  # noqa: BLE001
+        return jsonify({"looks": [], "cuts": []})
+
+@app.route("/api/edit", methods=["POST"])
+def api_edit():
+    """In-platform editor: reorder clips, swap look, re-cut to the beat, re-render."""
+    try:
+        import engine
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"engine unavailable: {e}"}), 500
+    d = request.get_json(force=True, silent=True) or {}
+    job_id = d.get("job_id")
+    if not job_id:
+        return jsonify({"ok": False, "error": "no job_id"}), 400
+    res = engine.rerender(BRAND, job_id, order=d.get("order"),
+                          look=d.get("look"), cut=d.get("cut"),
+                          every=int(d.get("every", 1)))
+    return jsonify(res), (200 if res.get("ok") else 200)
 
 @app.route("/api/videos")
 def api_videos():

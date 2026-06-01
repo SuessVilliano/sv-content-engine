@@ -15,6 +15,10 @@ day of content costs cents, not hundreds.
   filters.py     one-click cinematic looks
 ```
 
+Drop a song on the Studio → beat + lyrics detected → build to the beat → then
+✂️ Edit any music video in-platform (reorder clips, swap looks, re-cut) and
+re-render — no external tool, all under one roof.
+
 ## The pieces (all built, all tested)
 
 | Module | What it does | Cost |
@@ -66,8 +70,14 @@ Hit **Plan** to see the steps + exact cost for free. Hit **Build** to produce it
       progress to the Studio, and shows an inline preview when done. Steps that
       can't run (service offline) skip with a clear reason instead of hanging,
       so the job ends `partial` rather than failing.
-- [ ] **Drop-an-MP3 upload** in the Studio tab (browser → song.json → build).
-- [ ] **In-platform editor** — trim, reorder, swap look, re-cut to the beat.
+- [x] **Drop-an-MP3 upload** — drag a song onto the Studio; it analyses beat +
+      lyrics in-browser (`/api/upload-song` → `engine.ingest_song`), shows tempo /
+      beats / sections / lyric preview, then one click builds the music video to
+      the beat. Degrades cleanly with an install hint if librosa/whisper missing.
+- [x] **In-platform editor** — every finished music video gets an ✂️ Edit panel:
+      reorder/drop clips, toggle looks (they stack), pick the cut mode
+      (downbeat/beat/bars/seconds) and N, then re-render to the beat
+      (`/api/edit` → `engine.rerender`). Edits are versioned on the job.
 
 ### Live execution — how it runs
 `engine.execute(job, brand)` walks the planned steps, writing each artifact into

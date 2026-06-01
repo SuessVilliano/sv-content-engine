@@ -1,0 +1,68 @@
+{
+  "id": "my_business",
+  "name": "BUSINESS NAME — UGC Ads",
+  "type": "business",
+  "goal": "ugc_ads",
+  "base_dir": "~/Documents/SV_Content_Engine/brands/my_business",
+
+  "product": {
+    "name": "PRODUCT/SERVICE",
+    "offer": "What you are selling and the core promise",
+    "audience": "Who you are selling to",
+    "pain_points": ["the problem #1", "the problem #2"],
+    "cta": "Link in bio / Shop now / DM the word ...",
+    "assets_dir": "product_assets",
+    "_note": "Drop product photos/clips/logo in product_assets/ — the engine overlays them on B-roll and avatar shots."
+  },
+
+  "avatar": {
+    "engine": "heygem",
+    "_note": "The 'creator' face that reviews/recommends the product. Lock ONE reference image so the persona stays consistent across every ad.",
+    "reference_image": "product_assets/creator_face.png",
+    "character_sheet": ""
+  },
+
+  "voice": {
+    "engine": "voxcpm",
+    "api_url": "http://localhost:8808/api/clone",
+    "reference_audio": "",
+    "fallback_reference": "",
+    "style_rules": [
+      "Conversational, like a real customer talking to camera — not an announcer",
+      "Open with the problem, not the product",
+      "One clear CTA at the end",
+      "Short sentences. Energy up, but believable."
+    ]
+  },
+
+  "pillars": [
+    {"name": "HOOK_TEST",  "tone": "5 different 3-second hooks for the same product (test which wins)"},
+    {"name": "PROBLEM",    "tone": "relatable pain-point story, product as the fix"},
+    {"name": "DEMO",       "tone": "show the product working, screen/hand B-roll"},
+    {"name": "SOCIAL_PROOF","tone": "testimonial-style, before/after framing"}
+  ],
+
+  "hashtags": "#smallbusiness #ugc #ad #founder #shopsmall #productlaunch",
+
+  "signoff": "",
+
+  "brand_voice": {
+    "tone": "Authentic creator review. Warm, honest, a little excited.",
+    "never": "Corporate. Stiff. Obvious ad-read.",
+    "openers": ["Okay I need to talk about this...", "Stop scrolling if you...", "Nobody told me..."],
+    "thesis": "It should feel like a friend's recommendation, not a commercial."
+  },
+
+  "generation": {
+    "default_route": "local",
+    "text_to_video":  {"local": "ltx-video", "hero": "veo-3.1"},
+    "image_to_video": {"local": "wan2.2",    "hero": "kling-2.0"},
+    "music_video":    {"local": "ltx-2.3-audio", "hero": "freebeat"}
+  },
+
+  "distribution": {
+    "ghl_location_id": "",
+    "ghl_pit_token": "env:GHL_PIT_TOKEN",
+    "platforms": ["FB", "IG", "TikTok"]
+  }
+}

@@ -5,17 +5,43 @@ Run: python3 dashboard.py
 Open: http://localhost:4444
 """
 import os, json, subprocess, threading, urllib.request
-from flask import Flask, send_file, jsonify, render_template_string, request
+from flask import Flask, send_file, jsonify, render_template_string, request, abort
 from pathlib import Path
 from datetime import datetime
 
 # Generation status tracker
 GEN_STATUS = {}  # day_num -> {"status": "generating|done|error", "message": "..."}
 
-VOXCPM_API = "http://localhost:8808/api/clone"
-# Use the clean Harrahs H1 reference (confirmed best quality)
-SV_REF     = "/Users/jamaurjohnson/Documents/SV_Content_Engine/assets/sv_voice_harrahs_clean.wav"
-SV_REF_FALLBACK = "/Users/jamaurjohnson/Documents/SV_Content_Engine/assets/sv_reference.wav"
+_MISSING_SECRETS = []
+def _secret(name: str, default: str = "") -> str:
+    """Read a credential from the environment. Never hardcode secrets in source —
+    set them in the shell / .env. Missing ones are collected and warned about once
+    at startup so a feature that needs them fails loudly, not silently."""
+    val = os.environ.get(name, default)
+    if not val:
+        _MISSING_SECRETS.append(name)
+    return val
+
+
+# ── Multi-brand config layer ────────────────────────────────────────────
+# The active brand (brands/_active.json or $SV_BRAND) drives all paths, voice,
+# and routing. If the brand layer is absent we fall back to the original
+# hardcoded Source Vessel defaults so this dashboard keeps working unchanged.
+try:
+    import brands as _brands
+    BRAND = _brands.active_brand()
+except Exception:  # noqa: BLE001 — never let config break the dashboard
+    BRAND = None
+
+if BRAND is not None:
+    VOXCPM_API      = BRAND.voice.get("api_url", "http://localhost:8808/api/clone")
+    SV_REF          = BRAND.voice.get("reference_audio", "")
+    SV_REF_FALLBACK = BRAND.voice.get("fallback_reference", "")
+else:
+    VOXCPM_API = "http://localhost:8808/api/clone"
+    # Use the clean Harrahs H1 reference (confirmed best quality)
+    SV_REF     = "/Users/jamaurjohnson/Documents/SV_Content_Engine/assets/sv_voice_harrahs_clean.wav"
+    SV_REF_FALLBACK = "/Users/jamaurjohnson/Documents/SV_Content_Engine/assets/sv_reference.wav"
 
 def generate_voice_async(day_num, script_text):
     """Generate voice in background thread so approve is non-blocking"""
@@ -56,19 +82,66 @@ def generate_voice_async(day_num, script_text):
         print(f"[Voice] Day {day_num} error: {e}")
 
 app = Flask(__name__)
+# cap uploads (songs/videos) so a huge POST can't fill the disk
+app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("SV_MAX_UPLOAD_MB", "300")) * 1024 * 1024
 
-BASE    = "/Users/jamaurjohnson/Documents/SV_Content_Engine"
-SHORTS  = f"{BASE}/shorts_reels"
-VOICE   = f"{BASE}/voice"
-BEATS   = f"{BASE}/assets/music"
-SCRIPTS = f"{BASE}/scripts"
+# ── Auth ────────────────────────────────────────────────────────────────
+# If SV_DASHBOARD_TOKEN is set, every request must present it (header
+# X-SV-Token or ?token=). Required when binding to a LAN; harmless on
+# localhost. Without a token the dashboard can trigger paid generation and
+# publish to socials, so set one before exposing it beyond 127.0.0.1.
+SV_TOKEN = os.environ.get("SV_DASHBOARD_TOKEN", "")
+
+@app.before_request
+def _require_token():
+    if not SV_TOKEN:
+        return
+    sent = request.headers.get("X-SV-Token") or request.args.get("token", "")
+    if sent != SV_TOKEN:
+        abort(401)
+
+def _safe_path(base: str, *parts: str):
+    """Join under `base` and confirm the result stays inside it. Returns the
+    resolved path, or None on traversal (e.g. '../../etc/passwd')."""
+    base_r = os.path.realpath(base)
+    p = os.path.realpath(os.path.join(base_r, *parts))
+    if p != base_r and not p.startswith(base_r + os.sep):
+        return None
+    return p
+
+if BRAND is not None:
+    BASE    = str(BRAND.base_dir)
+    SHORTS  = str(BRAND.folder("shorts"))
+    VOICE   = str(BRAND.folder("voice"))
+    BEATS   = str(BRAND.folder("beats"))
+    SCRIPTS = str(BRAND.folder("scripts"))
+    DRAFTS  = str(BRAND.folder("drafts"))
+else:
+    BASE    = os.environ.get("SV_BASE_DIR") or "/Users/jamaurjohnson/Documents/SV_Content_Engine"
+    SHORTS  = f"{BASE}/shorts_reels"
+    VOICE   = f"{BASE}/voice"
+    BEATS   = f"{BASE}/assets/music"
+    SCRIPTS = f"{BASE}/scripts"
+    DRAFTS  = f"{BASE}/drafts"
 THUMBS  = "/tmp/sv_dashboard_thumbs"
-DRAFTS  = f"{BASE}/drafts"
-FFMPEG  = "/opt/homebrew/bin/ffmpeg"
-FFPROBE = "/opt/homebrew/bin/ffprobe"
+
+def _find_bin(name: str) -> str:
+    import shutil as _sh
+    for c in (os.environ.get(name.upper()), f"/opt/homebrew/bin/{name}",
+              f"/usr/bin/{name}", name):
+        if c and (_sh.which(c) or os.path.exists(c)):
+            return c
+    return name  # fall back to PATH lookup at call time
+
+FFMPEG  = _find_bin("ffmpeg")
+FFPROBE = _find_bin("ffprobe")
 
 for d in [THUMBS, DRAFTS]:
-    os.makedirs(d, exist_ok=True)
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        pass  # read-only filesystem (e.g. serverless) — features needing
+              # this dir degrade gracefully; the dashboard still boots.
 
 def list_files(folder, exts):
     if not os.path.exists(folder): return []
@@ -87,7 +160,7 @@ def make_thumb(video_path, thumb_path):
         subprocess.run([FFMPEG,"-y","-i",video_path,"-ss","0.5","-vframes","1",
                         "-vf","scale=360:-1",thumb_path], capture_output=True, timeout=10)
         return os.path.exists(thumb_path)
-    except: return False
+    except Exception: return False
 
 def list_drafts():
     """List pending script drafts awaiting review"""
@@ -181,7 +254,8 @@ HTML = r"""<!DOCTYPE html>
 <!-- TABS — horizontal scroll on mobile -->
 <div class="tab-scroll px-4 md:px-8 pt-3 border-b" style="border-color:#1E1E2E">
   <div class="flex gap-0.5 min-w-max md:min-w-0">
-    <button onclick="showTab('videos')"   id="tab-videos"   class="tab-btn active-tab  px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">🎬 Videos</button>
+    <button onclick="showTab('studio')"   id="tab-studio"   class="tab-btn active-tab  px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">✨ Studio</button>
+    <button onclick="showTab('videos')"   id="tab-videos"   class="tab-btn inactive-tab px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">🎬 Videos</button>
     <button onclick="showTab('drafts')"   id="tab-drafts"   class="tab-btn inactive-tab px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">📝 Drafts</button>
     <button onclick="showTab('voice')"    id="tab-voice"    class="tab-btn inactive-tab px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">🎙️ Voice</button>
     <button onclick="showTab('beats')"    id="tab-beats"    class="tab-btn inactive-tab px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">🎵 Beats</button>
@@ -200,8 +274,50 @@ HTML = r"""<!DOCTYPE html>
 <!-- CONTENT -->
 <div class="px-4 md:px-8 py-4 md:py-6">
 
+  <!-- STUDIO TAB — natural-language command bar -->
+  <div id="tab-content-studio" class="tab-content">
+    <div class="max-w-3xl mx-auto">
+      <!-- drop-a-song -->
+      <div id="dropzone" class="rounded-2xl p-5 mb-4 text-center cursor-pointer transition-all"
+           style="border:1.5px dashed #2A2A3C;background:rgba(201,168,76,.03)"
+           onclick="document.getElementById('song-file').click()">
+        <p class="text-[13px] font-bold" style="color:#C9A84C">🎵 Drop a song to make a music video</p>
+        <p class="text-[11px] mt-1" style="color:#555">MP3 / WAV — I'll find the beat & lyrics, then build to the beat</p>
+        <input type="file" id="song-file" accept="audio/*" class="hidden" onchange="uploadSong(this.files[0])">
+      </div>
+      <div id="song-result" class="hidden card rounded-2xl p-4 mb-4"></div>
+
+      <div class="card rounded-2xl p-4 md:p-5 mb-5">
+        <p class="text-[11px] font-bold mb-2" style="color:#C9A84C;letter-spacing:.12em">✨ TYPE WHAT YOU WANT · IT BUILDS IT</p>
+        <textarea id="cmd-input" rows="2"
+          class="w-full rounded-xl px-4 py-3 text-sm bg-black/30 border outline-none resize-none"
+          style="border-color:#2A2A3C;color:#eee"
+          placeholder="e.g. make me a 30s moody trading short about discipline, cinematic look — or — music video for midnight_bloom.mp3, neon, cut on the beat"></textarea>
+        <div class="flex items-center justify-between mt-3 gap-2">
+          <p id="cmd-hint" class="text-[11px]" style="color:#555">Plan is free · I only build when you hit Build</p>
+          <div class="flex gap-2">
+            <button onclick="runCommand(true)"  id="cmd-plan-btn"
+              class="px-4 py-2 rounded-xl text-[13px] font-bold border" style="border-color:#2A2A3C;color:#bbb">Plan</button>
+            <button onclick="runCommand(false)" id="cmd-build-btn"
+              class="px-5 py-2 rounded-xl text-[13px] font-black" style="background:#C9A84C;color:#0A0A0F">Build</button>
+          </div>
+        </div>
+        <div id="cmd-plan" class="hidden mt-4 rounded-xl p-3 bg-black/20 border" style="border-color:#2A2A3C"></div>
+      </div>
+
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-[10px] font-bold" style="color:#555;letter-spacing:.1em">RECENT BUILDS</p>
+        <button onclick="loadJobs()" class="text-[11px]" style="color:#666">↻ refresh</button>
+      </div>
+      <div id="jobs-list" class="space-y-3"></div>
+      <p id="jobs-empty" class="hidden text-center py-16 text-sm" style="color:#444">
+        Nothing built yet — type a request above and hit Build
+      </p>
+    </div>
+  </div>
+
   <!-- VIDEOS TAB -->
-  <div id="tab-content-videos" class="tab-content">
+  <div id="tab-content-videos" class="tab-content hidden">
     <p class="text-xs mb-4" style="color:#555">Tap any video to preview · Approve to send to YouTube</p>
     <div id="videos-grid"
          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4"></div>
@@ -388,9 +504,39 @@ HTML = r"""<!DOCTYPE html>
   </div>
 </div>
 
+<!-- IN-PLATFORM EDITOR -->
+<div id="editor-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(0,0,0,.7)">
+  <div class="card rounded-2xl p-5 w-full max-w-lg" style="max-height:90vh;overflow-y:auto">
+    <div class="flex items-center justify-between mb-3">
+      <p class="text-[13px] font-black" style="color:#C9A84C">✂️ EDIT · re-cut to the beat</p>
+      <button onclick="closeEditor()" class="text-sm" style="color:#666">✕</button>
+    </div>
+    <p class="text-[10px] font-bold mb-1" style="color:#555">CLIP ORDER — drag to reorder, ✕ to drop</p>
+    <div id="editor-clips" class="space-y-1 mb-3"></div>
+    <div class="grid grid-cols-2 gap-3 mb-3">
+      <div>
+        <p class="text-[10px] font-bold mb-1" style="color:#555">CUT</p>
+        <select id="editor-cut" class="w-full rounded-lg px-2 py-2 text-[12px] bg-black/30 border" style="border-color:#2A2A3C;color:#ddd"></select>
+      </div>
+      <div>
+        <p class="text-[10px] font-bold mb-1" style="color:#555">EVERY (n beats/bars)</p>
+        <input id="editor-every" type="number" min="1" value="1" class="w-full rounded-lg px-2 py-2 text-[12px] bg-black/30 border" style="border-color:#2A2A3C;color:#ddd">
+      </div>
+    </div>
+    <p class="text-[10px] font-bold mb-1" style="color:#555">LOOK — tap to toggle (stacks)</p>
+    <div id="editor-looks" class="flex flex-wrap gap-1.5 mb-4"></div>
+    <div class="flex gap-3">
+      <button onclick="closeEditor()" class="flex-1 py-2.5 rounded-xl text-[13px] font-bold" style="border:1px solid #1E1E2E;color:rgba(255,255,255,.4)">Cancel</button>
+      <button onclick="submitEdit()" id="editor-go" class="flex-1 py-2.5 rounded-xl text-[13px] font-black" style="background:#C9A84C;color:#0A0A0F">Re-render</button>
+    </div>
+    <p id="editor-msg" class="text-[11px] mt-2 text-center" style="color:#777"></p>
+  </div>
+</div>
+
 <script>
 let currentFile = null;
 let allVideos = [], allVoice = [], allBeats = [], allDrafts = [];
+let editorState = { job: null, clips: [], look: [], looks: [], cuts: [] };
 
 // ── TABS ─────────────────────────────────────────────────────
 function showTab(name) {
@@ -617,6 +763,198 @@ async function loadAll() {
     renderDrafts(drafts);
     renderPipeline(vids, vc);
   } catch(e) { console.error(e); }
+}
+
+// ── STUDIO (command bar) ──────────────────────────────────────
+async function runCommand(planOnly) {
+  const input = document.getElementById('cmd-input');
+  const prompt = input.value.trim();
+  if (!prompt) { input.focus(); return; }
+  const planBox = document.getElementById('cmd-plan');
+  const buildBtn = document.getElementById('cmd-build-btn');
+  const planBtn  = document.getElementById('cmd-plan-btn');
+  buildBtn.disabled = planBtn.disabled = true;
+  planBox.classList.remove('hidden');
+  planBox.innerHTML = '<p class="text-xs" style="color:#888">Thinking…</p>';
+  try {
+    const res = await fetch('/api/command', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ prompt, dry_run: planOnly })
+    }).then(r=>r.json());
+    if (res.error) { planBox.innerHTML = '<p class="text-xs text-red-400">'+res.error+'</p>'; return; }
+    const p = res.plan, s = res.spec;
+    const cost = p.est_cost > 0
+      ? '<span class="text-amber-400 font-bold">~$'+p.est_cost+'</span> <span style="color:#666">('+p.route+')</span>'
+      : '<span class="font-bold" style="color:#4ADE80">FREE</span> <span style="color:#666">(local)</span>';
+    const steps = p.steps.map(st =>
+      '<div class="flex items-center justify-between text-xs py-1">'
+      + '<span style="color:#bbb">• '+st.name+' <span style="color:#666">'+st.detail+'</span></span>'
+      + '<span style="color:#777">'+st.model+(st.est_cost? ' $'+st.est_cost:'')+'</span></div>'
+    ).join('');
+    planBox.innerHTML =
+      '<div class="flex items-center justify-between mb-2">'
+      + '<span class="text-[11px] font-bold" style="color:#C9A84C;letter-spacing:.1em">'
+      +   s.kind.toUpperCase().replace("_"," ")+' · '+(s.duration_s? s.duration_s+'s':'full')
+      +   (s.looks.length? ' · '+s.looks.join("+"):'')+'</span>'
+      + '<span class="text-xs">'+cost+'</span></div>'
+      + steps
+      + (planOnly
+          ? '<p class="text-[11px] mt-2" style="color:#555">Plan only — hit Build to produce it.</p>'
+          : '<p class="text-[11px] mt-2" style="color:#4ADE80">Queued ✓ job '+res.id+'</p>');
+    if (!planOnly) { input.value=''; loadJobs(); }
+  } catch(e) {
+    planBox.innerHTML = '<p class="text-xs text-red-400">'+e+'</p>';
+  } finally {
+    buildBtn.disabled = planBtn.disabled = false;
+  }
+}
+
+async function loadJobs() {
+  try {
+    const jobs = await fetch('/api/jobs').then(r=>r.json()).catch(()=>[]);
+    const list = document.getElementById('jobs-list');
+    const empty = document.getElementById('jobs-empty');
+    list.innerHTML = '';
+    if (!jobs.length) { empty.classList.remove('hidden'); return; }
+    empty.classList.add('hidden');
+    const badge = { planned:'#888', queued:'#C9A84C', running:'#A78BFA',
+                    done:'#4ADE80', partial:'#C9A84C', skipped:'#777', error:'#F87171' };
+    let anyRunning = false;
+    jobs.forEach(j => {
+      const s = j.spec, c = (j.plan && j.plan.est_cost) || 0;
+      if (j.status === 'running' || j.status === 'queued') anyRunning = true;
+      const steps = (j.step_status && Object.keys(j.step_status).length)
+        ? '<div class="flex flex-wrap gap-1 mt-2">' + Object.entries(j.step_status).map(([k,v]) => {
+            const st = v.startsWith('done') ? '#4ADE80' : v.startsWith('running') ? '#A78BFA'
+                     : v.startsWith('error') ? '#F87171' : '#666';
+            const ic = v.startsWith('done') ? '✓' : v.startsWith('running') ? '…'
+                     : v.startsWith('error') ? '✕' : '–';
+            return '<span class="text-[10px] px-1.5 py-0.5 rounded" style="background:#00000033;color:'+st+'" title="'+v.replace(/"/g,'')+'">'+ic+' '+k+'</span>';
+          }).join('') + '</div>'
+        : '';
+      const preview = (j.status === 'done' && j.output)
+        ? '<video src="/stream/job/'+j.id+'?t='+(j.edits?j.edits.length:0)+'" controls preload="metadata" class="w-full rounded-lg mt-2" style="max-height:240px;background:#000"></video>'
+        : '';
+      const canEdit = s.kind === 'music_video' && j.artifacts
+        && (j.artifacts.clips||[]).length && j.artifacts.song_json;
+      const editBtn = canEdit
+        ? '<button onclick=\'openEditor("'+j.id+'")\' class="text-[11px] font-bold px-2.5 py-1 rounded-lg mt-2" style="background:#1A1A28;color:#C9A84C">✂️ Edit · re-cut</button>'
+        : '';
+      const card = document.createElement('div');
+      card.className = 'card rounded-xl p-3';
+      card.innerHTML =
+        '<div class="flex items-center justify-between mb-1">'
+        + '<span class="text-[10px] font-bold" style="color:'+(badge[j.status]||'#888')+';letter-spacing:.08em">'
+        +   (j.status||'').toUpperCase()+' · '+s.kind.replace("_"," ")+'</span>'
+        + '<span class="text-[11px]" style="color:#666">'+(c>0?'$'+c:'free')+'</span></div>'
+        + '<p class="text-sm" style="color:#ddd">'+(s.prompt||'').slice(0,120)+'</p>'
+        + steps + preview + editBtn
+        + '<p class="text-[10px] mt-1" style="color:#555">'+j.id+'</p>';
+      list.appendChild(card);
+    });
+    // while anything is running, poll faster so progress feels live
+    if (anyRunning) { clearTimeout(window._jobPoll); window._jobPoll = setTimeout(loadJobs, 4000); }
+  } catch(e) { console.error(e); }
+}
+
+// ── DROP-A-SONG ───────────────────────────────────────────────
+async function uploadSong(file) {
+  if (!file) return;
+  const box = document.getElementById('song-result');
+  box.classList.remove('hidden');
+  box.innerHTML = '<p class="text-xs" style="color:#888">Analysing '+file.name+' — finding beat & lyrics…</p>';
+  try {
+    const fd = new FormData(); fd.append('song', file);
+    const r = await fetch('/api/upload-song', { method:'POST', body: fd }).then(x=>x.json());
+    if (!r.ok) {
+      box.innerHTML = '<p class="text-xs text-red-400">'+(r.error||'upload failed')+'</p>'
+        + (r.hint? '<p class="text-[11px] mt-1" style="color:#666">Tip: '+r.hint+'</p>':'');
+      return;
+    }
+    box.innerHTML =
+      '<p class="text-[12px] font-bold" style="color:#4ADE80">✓ '+r.name+' analysed</p>'
+      + '<div class="flex flex-wrap gap-3 mt-2 text-[12px]" style="color:#bbb">'
+      +   '<span>🥁 '+(r.tempo||'?')+' BPM</span><span>· '+r.beats+' beats</span>'
+      +   '<span>· '+r.sections+' sections</span><span>· '+r.lyrics+' lyric lines</span></div>'
+      + (r.lyric_preview? '<p class="text-[11px] mt-2 italic" style="color:#888">"'+r.lyric_preview+'…"</p>':'')
+      + '<button onclick=\'buildSong("'+r.name+'")\' class="mt-3 px-4 py-2 rounded-xl text-[13px] font-black" style="background:#C9A84C;color:#0A0A0F">🎬 Build music video to the beat</button>';
+  } catch(e) { box.innerHTML = '<p class="text-xs text-red-400">'+e+'</p>'; }
+}
+function buildSong(name) {
+  document.getElementById('cmd-input').value = 'music video for '+name+', cut on the beat';
+  runCommand(false);
+}
+// dropzone drag styling
+(function(){
+  const dz = document.getElementById('dropzone'); if (!dz) return;
+  ['dragover','dragenter'].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); dz.style.borderColor = '#C9A84C'; dz.style.background = 'rgba(201,168,76,.08)';
+  }));
+  ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => {
+    e.preventDefault(); dz.style.borderColor = '#2A2A3C'; dz.style.background = 'rgba(201,168,76,.03)';
+  }));
+  dz.addEventListener('drop', e => { if (e.dataTransfer.files[0]) uploadSong(e.dataTransfer.files[0]); });
+})();
+
+// ── IN-PLATFORM EDITOR ────────────────────────────────────────
+async function openEditor(jobId) {
+  const job = await fetch('/api/job/'+jobId).then(r=>r.json());
+  const opt = await fetch('/api/looks').then(r=>r.json());
+  editorState.job = job;
+  editorState.looks = opt.looks || []; editorState.cuts = opt.cuts || [];
+  editorState.clips = (job.artifacts.clips||[]).map((c,i)=>({i, name:c.split('/').pop()}));
+  editorState.look = (job.spec.looks||[]).slice();
+  // cut select
+  const cutSel = document.getElementById('editor-cut');
+  cutSel.innerHTML = editorState.cuts.map(c=>'<option'+(c===job.spec.cut?' selected':'')+'>'+c+'</option>').join('');
+  // looks toggles
+  document.getElementById('editor-looks').innerHTML = editorState.looks.map(l=>{
+    const on = editorState.look.includes(l);
+    return '<button data-look="'+l+'" onclick="toggleLook(this)" class="text-[11px] px-2 py-1 rounded-lg" style="background:'+(on?'#C9A84C':'#1A1A28')+';color:'+(on?'#0A0A0F':'#999')+'">'+l+'</button>';
+  }).join('');
+  document.getElementById('editor-msg').textContent = '';
+  renderEditorClips();
+  document.getElementById('editor-modal').classList.remove('hidden');
+}
+function renderEditorClips() {
+  const box = document.getElementById('editor-clips');
+  box.innerHTML = editorState.clips.map((c,pos)=>
+    '<div class="flex items-center gap-2 rounded-lg px-2 py-1.5" style="background:#1A1A28">'
+    + '<span class="text-[11px] font-bold" style="color:#C9A84C">'+(pos+1)+'</span>'
+    + '<span class="text-[11px] flex-1 truncate" style="color:#bbb">'+c.name+'</span>'
+    + '<button onclick="moveClip('+pos+',-1)" class="text-[12px] px-1" style="color:#666">↑</button>'
+    + '<button onclick="moveClip('+pos+',1)" class="text-[12px] px-1" style="color:#666">↓</button>'
+    + '<button onclick="dropClip('+pos+')" class="text-[12px] px-1" style="color:#F87171">✕</button></div>'
+  ).join('') || '<p class="text-[11px]" style="color:#F87171">No clips left — drop fewer.</p>';
+}
+function moveClip(pos, dir) {
+  const t = pos + dir; if (t<0 || t>=editorState.clips.length) return;
+  const a = editorState.clips;[a[pos],a[t]]=[a[t],a[pos]]; renderEditorClips();
+}
+function dropClip(pos) { editorState.clips.splice(pos,1); renderEditorClips(); }
+function toggleLook(btn) {
+  const l = btn.dataset.look, i = editorState.look.indexOf(l);
+  if (i>=0) editorState.look.splice(i,1); else editorState.look.push(l);
+  const on = editorState.look.includes(l);
+  btn.style.background = on?'#C9A84C':'#1A1A28'; btn.style.color = on?'#0A0A0F':'#999';
+}
+function closeEditor() { document.getElementById('editor-modal').classList.add('hidden'); }
+async function submitEdit() {
+  const go = document.getElementById('editor-go'), msg = document.getElementById('editor-msg');
+  if (!editorState.clips.length) { msg.textContent='Keep at least one clip.'; return; }
+  go.disabled = true; msg.textContent = 'Re-rendering to the beat…';
+  try {
+    const r = await fetch('/api/edit', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        job_id: editorState.job.id,
+        order: editorState.clips.map(c=>c.i),
+        look: editorState.look,
+        cut: document.getElementById('editor-cut').value,
+        every: parseInt(document.getElementById('editor-every').value)||1,
+      })}).then(x=>x.json());
+    if (!r.ok) { msg.textContent = '✕ '+(r.error||'failed'); return; }
+    msg.textContent = '✓ Re-rendered'; closeEditor(); loadJobs();
+  } catch(e) { msg.textContent = '✕ '+e; } finally { go.disabled = false; }
 }
 
 // ── VIDEOS ────────────────────────────────────────────────────
@@ -972,7 +1310,16 @@ async function approveDraft(name, btn) {
 
 // ── INIT ──────────────────────────────────────────────────────
 loadAll();
+loadJobs();
 setInterval(loadAll, 30000);
+setInterval(loadJobs, 30000);
+// Cmd/Ctrl+Enter in the command bar = Build
+document.addEventListener('keydown', e => {
+  if ((e.metaKey||e.ctrlKey) && e.key==='Enter'
+      && document.activeElement && document.activeElement.id==='cmd-input') {
+    e.preventDefault(); runCommand(false);
+  }
+});
 </script>
 </body>
 </html>"""
@@ -980,6 +1327,101 @@ setInterval(loadAll, 30000);
 @app.route("/")
 def index():
     return render_template_string(HTML)
+
+# ── Studio command bar ────────────────────────────────────────────────────
+@app.route("/api/command", methods=["POST"])
+def api_command():
+    """Natural language -> JobSpec -> plan (and queue the job if not dry_run)."""
+    try:
+        import engine
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": f"engine unavailable: {e}"}), 500
+    data = request.get_json(force=True, silent=True) or {}
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return jsonify({"error": "empty prompt"}), 400
+    brand_id = BRAND.id if BRAND is not None else ""
+    try:
+        job = engine.build(prompt, brand_id, dry_run=bool(data.get("dry_run", True)))
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": str(e)}), 500
+    return jsonify(job)
+
+@app.route("/api/jobs")
+def api_jobs():
+    try:
+        import engine
+        return jsonify(engine.list_jobs(BRAND))
+    except Exception:  # noqa: BLE001
+        return jsonify([])
+
+@app.route("/api/job/<job_id>")
+def api_job(job_id):
+    try:
+        import engine
+        job = engine.get_job(BRAND, job_id)
+        return jsonify(job or {"error": "not found"}), (200 if job else 404)
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/stream/job/<job_id>")
+def stream_job_file(job_id):
+    """Stream a finished job's output video for in-Studio preview."""
+    try:
+        import engine
+        job = engine.get_job(BRAND, job_id)
+        out = job and job.get("output")
+        if out and os.path.exists(out):
+            return send_file(out, mimetype="video/mp4")
+    except Exception:  # noqa: BLE001
+        pass
+    return ("not found", 404)
+
+@app.route("/api/upload-song", methods=["POST"])
+def api_upload_song():
+    """Drag-drop an MP3 -> save into beats/ -> analyse beat + lyrics -> summary."""
+    try:
+        import engine
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"engine unavailable: {e}"}), 500
+    f = request.files.get("song")
+    if f is None or not f.filename:
+        return jsonify({"ok": False, "error": "no file"}), 400
+    name = os.path.basename(f.filename)
+    if not name.lower().endswith((".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg")):
+        return jsonify({"ok": False, "error": "not an audio file"}), 400
+    beats_dir = str(BRAND.folder("beats")) if BRAND is not None else "uploads"
+    os.makedirs(beats_dir, exist_ok=True)
+    dest = _safe_path(beats_dir, name)
+    if not dest:
+        return jsonify({"ok": False, "error": "bad filename"}), 400
+    f.save(dest)
+    res = engine.ingest_song(BRAND, dest)
+    return jsonify(res), (200 if res.get("ok") else 422)
+
+@app.route("/api/looks")
+def api_looks():
+    try:
+        import engine
+        return jsonify({"looks": engine.LOOK_NAMES, "cuts": engine.CUT_MODES})
+    except Exception:  # noqa: BLE001
+        return jsonify({"looks": [], "cuts": []})
+
+@app.route("/api/edit", methods=["POST"])
+def api_edit():
+    """In-platform editor: reorder clips, swap look, re-cut to the beat, re-render."""
+    try:
+        import engine
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"ok": False, "error": f"engine unavailable: {e}"}), 500
+    d = request.get_json(force=True, silent=True) or {}
+    job_id = d.get("job_id")
+    if not job_id:
+        return jsonify({"ok": False, "error": "no job_id"}), 400
+    res = engine.rerender(BRAND, job_id, order=d.get("order"),
+                          look=d.get("look"), cut=d.get("cut"),
+                          every=int(d.get("every", 1)))
+    return jsonify(res), (200 if res.get("ok") else 422)
 
 @app.route("/api/videos")
 def api_videos():
@@ -999,34 +1441,34 @@ def api_drafts():
 
 @app.route("/stream/videos/<name>")
 def stream_video(name):
-    p = os.path.join(SHORTS, name)
-    if not os.path.exists(p): return "Not found", 404
+    p = _safe_path(SHORTS, name)
+    if not p or not os.path.exists(p): return "Not found", 404
     return send_file(p, mimetype="video/mp4", conditional=True)
 
 @app.route("/stream/voice/<name>")
 def stream_voice(name):
-    p = os.path.join(VOICE, name)
-    if not os.path.exists(p): return "Not found", 404
+    p = _safe_path(VOICE, name)
+    if not p or not os.path.exists(p): return "Not found", 404
     return send_file(p, mimetype="audio/wav" if name.endswith(".wav") else "audio/mpeg", conditional=True)
 
 @app.route("/stream/beats/<name>")
 def stream_beat(name):
-    p = os.path.join(BEATS, name)
-    if not os.path.exists(p): return "Not found", 404
+    p = _safe_path(BEATS, name)
+    if not p or not os.path.exists(p): return "Not found", 404
     return send_file(p, mimetype="audio/mpeg", conditional=True)
 
 @app.route("/thumb/<name>")
 def thumb(name):
-    vp = os.path.join(SHORTS, name)
-    tp = os.path.join(THUMBS, name.replace(".mp4", ".jpg"))
-    if not os.path.exists(vp): return "Not found", 404
+    vp = _safe_path(SHORTS, name)
+    tp = _safe_path(THUMBS, name.replace(".mp4", ".jpg"))
+    if not vp or not tp or not os.path.exists(vp): return "Not found", 404
     make_thumb(vp, tp)
     if os.path.exists(tp): return send_file(tp, mimetype="image/jpeg")
     return "No thumb", 404
 
-GHL_LOCATION_ID = "alK3nxmaA2aXkCGUQlUT"
-GHL_PIT_TOKEN   = "pit-33dcb1f3-6ddd-4188-97f9-1504518f6e39"
-GHL_USER_ID     = "69dfa1a7ac74e91e82eca6d6"
+GHL_LOCATION_ID = os.environ.get("GHL_LOCATION_ID", "alK3nxmaA2aXkCGUQlUT")
+GHL_PIT_TOKEN   = _secret("GHL_PIT_TOKEN")
+GHL_USER_ID     = os.environ.get("GHL_USER_ID", "69dfa1a7ac74e91e82eca6d6")
 GHL_SOCIAL_API  = f"https://services.leadconnectorhq.com/social-media-posting/{GHL_LOCATION_ID}/posts"
 GHL_UPLOAD_URL  = f"https://services.leadconnectorhq.com/medias/upload-file?locationId={GHL_LOCATION_ID}"
 
@@ -1038,9 +1480,9 @@ GHL_ACCOUNTS = [
     "69e13b37dc821ca23dbec6e6_alK3nxmaA2aXkCGUQlUT_000xyOrgq0S2obmqX8erjAFAQ3DruitgSfv_profile",  # Hybrid Funding TikTok
 ]
 
-R2_ACCOUNT_ID        = "3289e13e9aedd43be7ffe8629c0296c8"
-R2_ACCESS_KEY_ID     = "7ef6048224ddc42d16541cd67716cd91"
-R2_SECRET_ACCESS_KEY = "cfut_RqhkEXOYcddpcMGPxH16MwFS1FTRqXHHGQKNLkbt595bf070"
+R2_ACCOUNT_ID        = os.environ.get("R2_ACCOUNT_ID", "3289e13e9aedd43be7ffe8629c0296c8")
+R2_ACCESS_KEY_ID     = _secret("R2_ACCESS_KEY_ID")
+R2_SECRET_ACCESS_KEY = _secret("R2_SECRET_ACCESS_KEY")
 R2_BUCKET            = "sv-content-engine"
 R2_ENDPOINT          = f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
 
@@ -1227,8 +1669,8 @@ def api_approve_draft():
     name    = data.get("name", "")
 
     # Find the script file
-    script_path = os.path.join(SCRIPTS, name)
-    if not os.path.exists(script_path):
+    script_path = _safe_path(SCRIPTS, name)
+    if not script_path or not os.path.exists(script_path):
         return jsonify({"error": f"Script file not found: {name}"}), 404
 
     with open(script_path) as f:
@@ -1283,8 +1725,8 @@ def api_approve_draft():
 def api_gen_status():
     return jsonify(GEN_STATUS)
 
-FAL_API_KEY    = "d8d27e53-7a69-4ea4-a16f-284e97caa9fe:12c01f980a45fdffad46a3cdb6e8f312"
-HEYGEN_API_KEY = "sk_V2_hgu_k9GvV8Bbud0_BeD4VvnSwIgNO8ECptMC0BHmBZqnSpUv"
+FAL_API_KEY    = _secret("FAL_API_KEY")
+HEYGEN_API_KEY = _secret("HEYGEN_API_KEY")
 BROLL_DIR      = os.path.join(BASE, "broll_library")
 MASTERS_DIR    = os.path.join(BASE, "masters")
 
@@ -1299,7 +1741,7 @@ def api_engine_status():
         d = json.loads(r.read())
         model = d.get("model", "VoxCPM")
         results.append({"name": "VoxCPM H1", "detail": f"{model} · Harrahs voice · Port 8808", "status": "live", "badge": "LIVE"})
-    except:
+    except Exception:
         results.append({"name": "VoxCPM H1", "detail": "Port 8808 — not running", "status": "error", "badge": "OFFLINE"})
 
     # 2. fal.ai — check account balance
@@ -1345,7 +1787,7 @@ def api_engine_status():
     try:
         r = subprocess.run(["whisper", "--help"], capture_output=True, timeout=3)
         whisper_ok = True
-    except:
+    except Exception:
         pass
     results.append({"name": "Whisper Subs", "detail": "Word-level sync · Auto-burn", "status": "live" if whisper_ok else "warn", "badge": "LIVE" if whisper_ok else "CHECK"})
 
@@ -1353,7 +1795,7 @@ def api_engine_status():
     try:
         files_count = len([f for f in os.listdir(SHORTS) if f.endswith(".mp4")]) if os.path.exists(SHORTS) else 0
         results.append({"name": "Cloudflare R2", "detail": f"sv-content-engine · {files_count} finals", "status": "live", "badge": "LIVE"})
-    except:
+    except Exception:
         results.append({"name": "Cloudflare R2", "detail": "sv-content-engine bucket", "status": "live", "badge": "LIVE"})
 
     # 6. YouTube / Composio
@@ -1391,14 +1833,14 @@ def api_masters():
 
 @app.route("/stream/broll/<path:rel_path>")
 def stream_broll(rel_path):
-    p = os.path.join(BROLL_DIR, rel_path)
-    if not os.path.exists(p): return "Not found", 404
+    p = _safe_path(BROLL_DIR, rel_path)
+    if not p or not os.path.exists(p): return "Not found", 404
     return send_file(p, mimetype="video/mp4", conditional=True)
 
 @app.route("/stream/masters/<name>")
 def stream_masters(name):
-    p = os.path.join(MASTERS_DIR, name)
-    if not os.path.exists(p): return "Not found", 404
+    p = _safe_path(MASTERS_DIR, name)
+    if not p or not os.path.exists(p): return "Not found", 404
     return send_file(p, mimetype="video/mp4", conditional=True)
 
 # ── SCHEDULE TAB ROUTES ────────────────────────────────────────────────────────
@@ -1492,10 +1934,20 @@ def api_schedule_post():
         "message": f"Day {day} scheduled for {schedule_utc} across all 4 platforms ✅",
     })
 
-if __name__ == "__main__":
+def run(host=None, port=None):
+    host = host or os.environ.get("SV_HOST", "127.0.0.1")
+    port = int(port or os.environ.get("SV_PORT", "4444"))
     print("\n" + "="*50)
     print("  SV CONTENT ENGINE — Dashboard v2")
     print("  Mobile-optimized · Draft workflow live")
-    print("  Open: http://localhost:4444")
+    print(f"  Open: http://localhost:{port}")
+    if _MISSING_SECRETS:
+        print(f"  ⚠️  missing secrets (features disabled): {', '.join(sorted(set(_MISSING_SECRETS)))}")
+        print("     set them in your shell/.env — see .env.example")
+    if host != "127.0.0.1" and not SV_TOKEN:
+        print("  ⚠️  bound beyond localhost with NO auth token — set SV_DASHBOARD_TOKEN!")
     print("="*50 + "\n")
-    app.run(host="0.0.0.0", port=4444, debug=False)
+    app.run(host=host, port=port, debug=False)
+
+if __name__ == "__main__":
+    run()

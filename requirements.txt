@@ -1,0 +1,15 @@
+# ── Core (required to run the Studio) ───────────────────────────────────────
+flask>=3.0
+
+# ── Optional — each unlocks one capability; the app degrades without them ────
+# Natural-language parsing with Claude (falls back to rules without it)
+anthropic>=0.39
+# Song analysis for drop-an-MP3 (beat detection + lyric transcription)
+librosa>=0.10
+soundfile>=0.12
+openai-whisper>=20231117
+# Paid "hero" video via Google Veo (fal.ai needs only an API key, no SDK)
+google-genai>=0.3
+
+# ── Dev / tests ─────────────────────────────────────────────────────────────
+pytest>=8.0

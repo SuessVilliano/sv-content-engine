@@ -50,6 +50,7 @@
 
   "generation": {
     "default_route": "local",
+    "budget": {"daily_usd": 5.0, "monthly_usd": 50.0},
     "text_to_video":  {"local": "ltx-video", "hero": "veo-3.1"},
     "image_to_video": {"local": "wan2.2",    "hero": "kling-2.0"},
     "music_video":    {"local": "ltx-2.3-audio", "hero": "freebeat"}

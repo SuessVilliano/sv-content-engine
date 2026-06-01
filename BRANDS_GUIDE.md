@@ -115,6 +115,30 @@ Every brand has a `generation` block that decides **free-local vs paid-hero**:
   everything by default. This is what keeps spend near $0.
 - Mark a single clip as a "hero" shot and the engine escalates to the paid model
   (`B.route_for("text_to_video", hero=True)` → `veo-3.1`).
+- Optional `budget: { "daily_usd": 5, "monthly_usd": 50 }` caps paid spend.
 
-The **cost router** (next build) reads exactly this block, so configuring it now
-means it's ready the moment the router lands.
+## The cost router (`router.py`)
+
+`router.py` reads this block and actually dispatches generation: free local
+(ComfyUI) by default, paid hero only when you ask — and it refuses to spend by
+accident.
+
+```bash
+python3 router.py prices                                   # price table
+python3 router.py plan --kind text_to_video --count 20     # estimate a batch ($0 local)
+python3 router.py plan --kind text_to_video --count 20 --hero   # estimate paid batch
+python3 router.py gen  --kind image_to_video --image still.png  # run (local, free)
+python3 router.py gen  --kind text_to_video  --prompt "rain" --hero   # run (paid hero)
+python3 router.py gen  --kind text_to_video  --prompt "rain" --dry-run  # decide, spend nothing
+python3 router.py spend                                     # ledger: today / month / all-time
+```
+
+Guarantees:
+- **Never silently spends.** If ComfyUI is down or a workflow template is
+  missing, it raises — it does not fall back to a paid API.
+- **Budget guard.** A paid call that would breach `daily_usd`/`monthly_usd` is
+  blocked (override per-call with `--allow-over-budget`).
+- **Spend ledger.** Every paid clip is logged to `<base_dir>/.spend_ledger.jsonl`.
+
+Local generation needs one ComfyUI workflow per local model in `workflows/`
+(see `workflows/README.md` for the token contract).

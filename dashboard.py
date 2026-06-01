@@ -204,7 +204,8 @@ HTML = r"""<!DOCTYPE html>
 <!-- TABS — horizontal scroll on mobile -->
 <div class="tab-scroll px-4 md:px-8 pt-3 border-b" style="border-color:#1E1E2E">
   <div class="flex gap-0.5 min-w-max md:min-w-0">
-    <button onclick="showTab('videos')"   id="tab-videos"   class="tab-btn active-tab  px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">🎬 Videos</button>
+    <button onclick="showTab('studio')"   id="tab-studio"   class="tab-btn active-tab  px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">✨ Studio</button>
+    <button onclick="showTab('videos')"   id="tab-videos"   class="tab-btn inactive-tab px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">🎬 Videos</button>
     <button onclick="showTab('drafts')"   id="tab-drafts"   class="tab-btn inactive-tab px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">📝 Drafts</button>
     <button onclick="showTab('voice')"    id="tab-voice"    class="tab-btn inactive-tab px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">🎙️ Voice</button>
     <button onclick="showTab('beats')"    id="tab-beats"    class="tab-btn inactive-tab px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">🎵 Beats</button>
@@ -223,8 +224,40 @@ HTML = r"""<!DOCTYPE html>
 <!-- CONTENT -->
 <div class="px-4 md:px-8 py-4 md:py-6">
 
+  <!-- STUDIO TAB — natural-language command bar -->
+  <div id="tab-content-studio" class="tab-content">
+    <div class="max-w-3xl mx-auto">
+      <div class="card rounded-2xl p-4 md:p-5 mb-5">
+        <p class="text-[11px] font-bold mb-2" style="color:#C9A84C;letter-spacing:.12em">✨ TYPE WHAT YOU WANT · IT BUILDS IT</p>
+        <textarea id="cmd-input" rows="2"
+          class="w-full rounded-xl px-4 py-3 text-sm bg-black/30 border outline-none resize-none"
+          style="border-color:#2A2A3C;color:#eee"
+          placeholder="e.g. make me a 30s moody trading short about discipline, cinematic look — or — music video for midnight_bloom.mp3, neon, cut on the beat"></textarea>
+        <div class="flex items-center justify-between mt-3 gap-2">
+          <p id="cmd-hint" class="text-[11px]" style="color:#555">Plan is free · I only build when you hit Build</p>
+          <div class="flex gap-2">
+            <button onclick="runCommand(true)"  id="cmd-plan-btn"
+              class="px-4 py-2 rounded-xl text-[13px] font-bold border" style="border-color:#2A2A3C;color:#bbb">Plan</button>
+            <button onclick="runCommand(false)" id="cmd-build-btn"
+              class="px-5 py-2 rounded-xl text-[13px] font-black" style="background:#C9A84C;color:#0A0A0F">Build</button>
+          </div>
+        </div>
+        <div id="cmd-plan" class="hidden mt-4 rounded-xl p-3 bg-black/20 border" style="border-color:#2A2A3C"></div>
+      </div>
+
+      <div class="flex items-center justify-between mb-3">
+        <p class="text-[10px] font-bold" style="color:#555;letter-spacing:.1em">RECENT BUILDS</p>
+        <button onclick="loadJobs()" class="text-[11px]" style="color:#666">↻ refresh</button>
+      </div>
+      <div id="jobs-list" class="space-y-3"></div>
+      <p id="jobs-empty" class="hidden text-center py-16 text-sm" style="color:#444">
+        Nothing built yet — type a request above and hit Build
+      </p>
+    </div>
+  </div>
+
   <!-- VIDEOS TAB -->
-  <div id="tab-content-videos" class="tab-content">
+  <div id="tab-content-videos" class="tab-content hidden">
     <p class="text-xs mb-4" style="color:#555">Tap any video to preview · Approve to send to YouTube</p>
     <div id="videos-grid"
          class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4"></div>
@@ -642,6 +675,75 @@ async function loadAll() {
   } catch(e) { console.error(e); }
 }
 
+// ── STUDIO (command bar) ──────────────────────────────────────
+async function runCommand(planOnly) {
+  const input = document.getElementById('cmd-input');
+  const prompt = input.value.trim();
+  if (!prompt) { input.focus(); return; }
+  const planBox = document.getElementById('cmd-plan');
+  const buildBtn = document.getElementById('cmd-build-btn');
+  const planBtn  = document.getElementById('cmd-plan-btn');
+  buildBtn.disabled = planBtn.disabled = true;
+  planBox.classList.remove('hidden');
+  planBox.innerHTML = '<p class="text-xs" style="color:#888">Thinking…</p>';
+  try {
+    const res = await fetch('/api/command', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ prompt, dry_run: planOnly })
+    }).then(r=>r.json());
+    if (res.error) { planBox.innerHTML = '<p class="text-xs text-red-400">'+res.error+'</p>'; return; }
+    const p = res.plan, s = res.spec;
+    const cost = p.est_cost > 0
+      ? '<span class="text-amber-400 font-bold">~$'+p.est_cost+'</span> <span style="color:#666">('+p.route+')</span>'
+      : '<span class="font-bold" style="color:#4ADE80">FREE</span> <span style="color:#666">(local)</span>';
+    const steps = p.steps.map(st =>
+      '<div class="flex items-center justify-between text-xs py-1">'
+      + '<span style="color:#bbb">• '+st.name+' <span style="color:#666">'+st.detail+'</span></span>'
+      + '<span style="color:#777">'+st.model+(st.est_cost? ' $'+st.est_cost:'')+'</span></div>'
+    ).join('');
+    planBox.innerHTML =
+      '<div class="flex items-center justify-between mb-2">'
+      + '<span class="text-[11px] font-bold" style="color:#C9A84C;letter-spacing:.1em">'
+      +   s.kind.toUpperCase().replace("_"," ")+' · '+(s.duration_s? s.duration_s+'s':'full')
+      +   (s.looks.length? ' · '+s.looks.join("+"):'')+'</span>'
+      + '<span class="text-xs">'+cost+'</span></div>'
+      + steps
+      + (planOnly
+          ? '<p class="text-[11px] mt-2" style="color:#555">Plan only — hit Build to produce it.</p>'
+          : '<p class="text-[11px] mt-2" style="color:#4ADE80">Queued ✓ job '+res.id+'</p>');
+    if (!planOnly) { input.value=''; loadJobs(); }
+  } catch(e) {
+    planBox.innerHTML = '<p class="text-xs text-red-400">'+e+'</p>';
+  } finally {
+    buildBtn.disabled = planBtn.disabled = false;
+  }
+}
+
+async function loadJobs() {
+  try {
+    const jobs = await fetch('/api/jobs').then(r=>r.json()).catch(()=>[]);
+    const list = document.getElementById('jobs-list');
+    const empty = document.getElementById('jobs-empty');
+    list.innerHTML = '';
+    if (!jobs.length) { empty.classList.remove('hidden'); return; }
+    empty.classList.add('hidden');
+    const badge = { planned:'#888', queued:'#C9A84C', running:'#A78BFA', done:'#4ADE80', error:'#F87171' };
+    jobs.forEach(j => {
+      const s = j.spec, c = (j.plan && j.plan.est_cost) || 0;
+      const card = document.createElement('div');
+      card.className = 'card rounded-xl p-3';
+      card.innerHTML =
+        '<div class="flex items-center justify-between mb-1">'
+        + '<span class="text-[10px] font-bold" style="color:'+(badge[j.status]||'#888')+';letter-spacing:.08em">'
+        +   (j.status||'').toUpperCase()+' · '+s.kind.replace("_"," ")+'</span>'
+        + '<span class="text-[11px]" style="color:#666">'+(c>0?'$'+c:'free')+'</span></div>'
+        + '<p class="text-sm" style="color:#ddd">'+(s.prompt||'').slice(0,120)+'</p>'
+        + '<p class="text-[10px] mt-1" style="color:#555">'+j.id+'</p>';
+      list.appendChild(card);
+    });
+  } catch(e) { console.error(e); }
+}
+
 // ── VIDEOS ────────────────────────────────────────────────────
 function renderVideos(files) {
   const grid  = document.getElementById('videos-grid');
@@ -995,7 +1097,16 @@ async function approveDraft(name, btn) {
 
 // ── INIT ──────────────────────────────────────────────────────
 loadAll();
+loadJobs();
 setInterval(loadAll, 30000);
+setInterval(loadJobs, 30000);
+// Cmd/Ctrl+Enter in the command bar = Build
+document.addEventListener('keydown', e => {
+  if ((e.metaKey||e.ctrlKey) && e.key==='Enter'
+      && document.activeElement && document.activeElement.id==='cmd-input') {
+    e.preventDefault(); runCommand(false);
+  }
+});
 </script>
 </body>
 </html>"""
@@ -1003,6 +1114,33 @@ setInterval(loadAll, 30000);
 @app.route("/")
 def index():
     return render_template_string(HTML)
+
+# ── Studio command bar ────────────────────────────────────────────────────
+@app.route("/api/command", methods=["POST"])
+def api_command():
+    """Natural language -> JobSpec -> plan (and queue the job if not dry_run)."""
+    try:
+        import engine
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": f"engine unavailable: {e}"}), 500
+    data = request.get_json(force=True, silent=True) or {}
+    prompt = (data.get("prompt") or "").strip()
+    if not prompt:
+        return jsonify({"error": "empty prompt"}), 400
+    brand_id = BRAND.id if BRAND is not None else ""
+    try:
+        job = engine.build(prompt, brand_id, dry_run=bool(data.get("dry_run", True)))
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": str(e)}), 500
+    return jsonify(job)
+
+@app.route("/api/jobs")
+def api_jobs():
+    try:
+        import engine
+        return jsonify(engine.list_jobs(BRAND))
+    except Exception:  # noqa: BLE001
+        return jsonify([])
 
 @app.route("/api/videos")
 def api_videos():

@@ -422,6 +422,9 @@ HTML = r"""<!DOCTYPE html>
         <button onclick="processVod()" id="clips-process-btn"
                 class="flex-shrink-0 px-4 py-2 rounded-xl text-[13px] font-black"
                 style="background:#C9A84C;color:#0A0A0F">Process</button>
+        <button onclick="loadOpusJobs()" title="Refresh Opus Clip status"
+                class="flex-shrink-0 px-3 py-2 rounded-xl text-[13px] font-bold"
+                style="background:rgba(145,70,255,.2);color:#9146FF;border:1px solid rgba(145,70,255,.3)">↻</button>
       </div>
     </div>
     <div id="clips-process-msg" class="hidden mb-4 text-sm rounded-xl px-3 py-2" style="background:rgba(201,168,76,.1);color:#C9A84C;border:1px solid rgba(201,168,76,.2)"></div>
@@ -1410,6 +1413,9 @@ async function loadClips() {
   renderClipList('clips-approved-list',  approved, false, true);
   renderClipList('clips-published-list', published, false);
 
+  // Load Opus Clip jobs (prepends to pending list)
+  loadOpusJobs();
+
   // Stream status
   try {
     const ss = await fetch('/stream/status').then(r=>r.json()).catch(()=>({}));
@@ -1525,17 +1531,138 @@ async function processVod() {
   if (!vod_url) { urlEl.focus(); return; }
   btn.disabled = true; btn.textContent = '⏳';
   msgEl.classList.remove('hidden');
-  msgEl.textContent = 'Starting pipeline…';
+  msgEl.textContent = 'Submitting to Opus Clip…';
   try {
     const r = await fetch('/clips/process', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({vod_url})
     }).then(x=>x.json());
-    msgEl.textContent = r.message || (r.ok ? 'Pipeline started — check back in a few minutes.' : r.error);
+    msgEl.textContent = r.message || (r.ok ? 'Opus Clip is processing your video — clips will appear here in 5-10 minutes.' : r.error);
     msgEl.style.color = r.ok ? '#C9A84C' : '#EF4444';
-    if (r.ok) { urlEl.value = ''; setTimeout(loadClips, 5000); }
+    if (r.ok) { urlEl.value = ''; loadOpusJobs(); }
   } catch(e) { msgEl.textContent = 'Error: '+e; msgEl.style.color='#EF4444'; }
   btn.disabled = false; btn.textContent = 'Process';
+}
+
+// ── OPUS CLIP JOBS ────────────────────────────────────────────
+let _opusPollTimer = null;
+
+async function loadOpusJobs() {
+  try {
+    const data = await fetch('/clips/opus/status').then(r=>r.json()).catch(()=>({jobs:[]}));
+    const jobs = data.jobs || [];
+    renderOpusJobs(jobs);
+    // Auto-poll every 30s if any jobs are still processing
+    const anyProcessing = jobs.some(j => j.status === 'processing');
+    clearTimeout(_opusPollTimer);
+    if (anyProcessing) {
+      _opusPollTimer = setTimeout(loadOpusJobs, 30000);
+    }
+  } catch(e) { console.error('Opus poll error', e); }
+}
+
+function renderOpusJobs(jobs) {
+  const el = document.getElementById('clips-pending-list');
+  if (!el) return;
+  if (!jobs || !jobs.length) {
+    // Only clear if no regular clips are pending — let renderClipList handle it
+    return;
+  }
+
+  const processingJobs = jobs.filter(j => j.status === 'processing');
+  const doneJobs       = jobs.filter(j => j.status === 'done');
+
+  let html = '';
+
+  // Processing spinners
+  processingJobs.forEach(job => {
+    const shortUrl = (job.url||'').replace(/^https?:\/\//,'').slice(0,40);
+    html += `<div class="card rounded-xl p-3 fade-up">
+      <div class="flex items-center gap-2 mb-1.5">
+        <div class="w-2 h-2 rounded-full animate-pulse" style="background:#C9A84C"></div>
+        <span class="text-[11px] font-bold" style="color:#C9A84C">Opus Clip processing…</span>
+      </div>
+      <p class="text-[11px] truncate" style="color:rgba(255,255,255,.4)">${shortUrl}</p>
+      <p class="text-[10px] mt-1" style="color:#444">${(job.created||'').slice(0,16).replace('T',' ')} UTC</p>
+    </div>`;
+  });
+
+  // Done jobs — show clip cards
+  doneJobs.forEach(job => {
+    const clips = job.clips || [];
+    clips.forEach((clip, idx) => {
+      const score   = clip.score != null ? Math.round(clip.score * 100) + '%' : '';
+      const title   = (clip.title || 'Clip ' + (idx+1)).slice(0, 60);
+      const dur     = (clip.start_time != null && clip.end_time != null)
+        ? Math.round(clip.end_time - clip.start_time) + 's' : '';
+      const thumb   = clip.thumbnail_url
+        ? `<img src="${clip.thumbnail_url}" class="w-full h-20 object-cover rounded-lg mb-2"
+               onerror="this.remove()" loading="lazy">` : '';
+      html += `<div class="card rounded-xl p-3 fade-up">
+        ${thumb}
+        <div class="flex items-center gap-1.5 flex-wrap mb-1">
+          ${score ? `<span class="pill" style="background:rgba(0,200,81,.15);color:#00C851">${score}</span>` : ''}
+          ${dur   ? `<span class="pill" style="background:rgba(255,255,255,.06);color:#888">${dur}</span>` : ''}
+          <span class="pill" style="background:rgba(145,70,255,.15);color:#9146FF">Opus</span>
+        </div>
+        <p class="text-sm font-bold text-white mb-2">${title}</p>
+        <div class="flex gap-2">
+          ${clip.url ? `<button onclick="window.open('${clip.url}','_blank')"
+              class="flex-1 py-2 rounded-lg text-[11px] font-bold"
+              style="background:rgba(255,255,255,.06);color:rgba(255,255,255,.5)">▶ Play</button>` : ''}
+          <button onclick="opusClipApprove('${job.uid}',${idx},this)"
+                  class="flex-1 py-2 rounded-lg text-[11px] font-bold"
+                  style="background:rgba(0,200,81,.15);color:#00C851">✅ Approve</button>
+          <button onclick="opusClipReject('${job.uid}',${idx},this)"
+                  class="flex-1 py-2 rounded-lg text-[11px] font-bold"
+                  style="background:rgba(239,68,68,.12);color:#EF4444">✕ Reject</button>
+        </div>
+      </div>`;
+    });
+  });
+
+  if (html) {
+    el.innerHTML = html + el.innerHTML;
+  }
+}
+
+async function opusClipApprove(jobUid, clipIdx, btn) {
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    // Fetch current jobs to get clip data
+    const data = await fetch('/clips/opus/status').then(r=>r.json());
+    const job  = (data.jobs||[]).find(j=>j.uid===jobUid);
+    const clip = job && (job.clips||[])[clipIdx];
+    if (!clip) { btn.textContent='✕ Not found'; return; }
+    // Save as approved clip JSON in the standard output/approved/ folder
+    const payload = {
+      clip_id: jobUid+'_'+clipIdx,
+      status: 'approved',
+      vod_url: job.url,
+      clip_title: clip.title||'Opus Clip',
+      caption: clip.title||'',
+      score: clip.score,
+      start_time: clip.start_time,
+      end_time: clip.end_time,
+      video_path: clip.url||'',
+      thumbnail_url: clip.thumbnail_url||'',
+      source: 'opus',
+    };
+    await fetch('/clips/opus/approve', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    btn.closest('.card').style.opacity='0';
+    btn.closest('.card').style.transition='opacity .3s';
+    setTimeout(()=>{ btn.closest('.card').remove(); loadClips(); }, 300);
+  } catch(e) { btn.disabled=false; btn.textContent='✅ Approve'; }
+}
+
+function opusClipReject(jobUid, clipIdx, btn) {
+  btn.disabled = true; btn.textContent = '…';
+  btn.closest('.card').style.opacity='0';
+  btn.closest('.card').style.transition='opacity .3s';
+  setTimeout(()=>btn.closest('.card').remove(), 300);
 }
 
 // ── INIT ──────────────────────────────────────────────────────
@@ -1695,6 +1822,8 @@ def thumb(name):
     make_thumb(vp, tp)
     if os.path.exists(tp): return send_file(tp, mimetype="image/jpeg")
     return "No thumb", 404
+
+OPUS_API_KEY = _secret("OPUS_CLIP_API_KEY", "sk-6DW-CjS1wZG7wozl4w0wRPxK9INhR8A8gGIa9LBA")
 
 GHL_LOCATION_ID = os.environ.get("GHL_LOCATION_ID", "alK3nxmaA2aXkCGUQlUT")
 GHL_PIT_TOKEN   = _secret("GHL_PIT_TOKEN")
@@ -2269,45 +2398,73 @@ def api_clip_reject(clip_id):
 
 @app.route("/clips/process", methods=["POST"])
 def api_clips_process():
-    """Accept {vod_url: '...'} and kick off the full pipeline in a background thread.
-    On Vercel this will fail gracefully — run clip_main.py locally instead."""
-    data = request.get_json(force=True, silent=True) or {}
-    vod_url = (data.get("vod_url") or "").strip()
+    """Accept {vod_url: '...'} and submit to Opus Clip API for serverless clip detection."""
+    data = request.get_json(force=True)
+    vod_url = data.get("vod_url", "").strip()
     if not vod_url:
-        return jsonify({"ok": False, "error": "vod_url required"}), 400
+        return jsonify({"ok": False, "error": "No URL provided"})
 
-    def _run():
-        try:
-            import clip_config as _cfg
-            from pipeline.vod_downloader import download_vod
-            from pipeline.ai_detector import transcribe_vod, detect_moments
-            from pipeline.clip_editor import render_clip
-            from utils.storage import ClipRecord, new_clip_id, save_clip, STATUS_PENDING
-            vod_path = download_vod(vod_url, _cfg.DOWNLOADS_DIR)
-            transcript = transcribe_vod(vod_path)
-            moments = detect_moments(transcript)
-            for m in moments[:_cfg.MAX_CLIPS_PER_STREAM]:
-                rec = ClipRecord(
-                    clip_id=new_clip_id(),
-                    status=STATUS_PENDING,
-                    vod_url=vod_url,
-                    start_time=m.start_time,
-                    end_time=m.end_time,
-                    clip_title=m.clip_title,
-                    hook=m.hook,
-                    caption=m.caption,
-                    reason=m.reason,
-                    video_path="",
-                )
-                out = render_clip(vod_path, rec)
-                rec.video_path = str(out)
-                save_clip(rec)
-        except Exception as exc:
-            print(f"[Clip pipeline] error: {exc}")
+    import urllib.request as ur, json as _json
+    payload = _json.dumps({"url": vod_url, "language": "en"}).encode()
+    req = ur.Request("https://api.opus.pro/v1/clips", data=payload,
+                     headers={"Authorization": OPUS_API_KEY, "Content-Type": "application/json"},
+                     method="POST")
+    try:
+        with ur.urlopen(req, timeout=15) as resp:
+            result = _json.loads(resp.read())
+        clip_uid = result.get("data", {}).get("clip_uid") or result.get("clip_uid")
+        if clip_uid:
+            # Store pending job in a simple JSON file
+            jobs_file = Path(__file__).parent / "output" / "opus_jobs.json"
+            jobs_file.parent.mkdir(parents=True, exist_ok=True)
+            jobs = _json.loads(jobs_file.read_text()) if jobs_file.exists() else []
+            jobs.append({"uid": clip_uid, "url": vod_url, "status": "processing", "created": datetime.utcnow().isoformat()})
+            jobs_file.write_text(_json.dumps(jobs, indent=2))
+            return jsonify({"ok": True, "clip_uid": clip_uid, "message": "Opus Clip is processing your video — clips will appear here in 5-10 minutes."})
+        return jsonify({"ok": False, "error": str(result)})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
 
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
-    return jsonify({"ok": True, "message": f"Pipeline started for {vod_url}. Check /clips for results."})
+
+@app.route("/clips/opus/approve", methods=["POST"])
+def clips_opus_approve():
+    """Save an Opus Clip result into output/approved/ so the standard workflow picks it up."""
+    import json as _json
+    data = request.get_json(force=True, silent=True) or {}
+    clip_id = data.get("clip_id", "").strip()
+    if not clip_id:
+        return jsonify({"ok": False, "error": "clip_id required"}), 400
+    approved_dir = Path(__file__).parent / "output" / "approved"
+    approved_dir.mkdir(parents=True, exist_ok=True)
+    dest = approved_dir / f"{clip_id}.json"
+    dest.write_text(_json.dumps(data, indent=2))
+    return jsonify({"ok": True, "clip_id": clip_id})
+
+
+@app.route("/clips/opus/status")
+def clips_opus_status():
+    """Poll all pending Opus Clip jobs and update their status."""
+    import urllib.request as ur, json as _json
+    jobs_file = Path(__file__).parent / "output" / "opus_jobs.json"
+    if not jobs_file.exists():
+        return jsonify({"jobs": []})
+    jobs = _json.loads(jobs_file.read_text())
+    updated = []
+    for job in jobs:
+        if job["status"] == "processing":
+            try:
+                req = ur.Request(f"https://api.opus.pro/v1/clips/{job['uid']}",
+                                 headers={"Authorization": OPUS_API_KEY})
+                with ur.urlopen(req, timeout=10) as resp:
+                    data = _json.loads(resp.read()).get("data", {})
+                job["status"] = data.get("status", "processing")
+                if job["status"] == "done":
+                    job["clips"] = data.get("clips", [])
+            except Exception:
+                pass
+        updated.append(job)
+    jobs_file.write_text(_json.dumps(updated, indent=2))
+    return jsonify({"jobs": updated})
 
 
 @app.route("/stream/status")

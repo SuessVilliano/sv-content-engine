@@ -11,5 +11,14 @@ openai-whisper>=20231117
 # Paid "hero" video via Google Veo (fal.ai needs only an API key, no SDK)
 google-genai>=0.3
 
+# ── Live Clips pipeline (Twitch/Kick VOD processing) ────────────────────────
+yt-dlp>=2024.1
+python-telegram-bot==21.3
+tweepy==4.14.0
+Pillow>=10.0
+rich>=13.0
+ffmpeg-python>=0.2
+requests>=2.31
+
 # ── Dev / tests ─────────────────────────────────────────────────────────────
 pytest>=8.0

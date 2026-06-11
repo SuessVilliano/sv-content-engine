@@ -262,6 +262,7 @@ HTML = r"""<!DOCTYPE html>
     <button onclick="showTab('library')"  id="tab-library"  class="tab-btn inactive-tab px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">📚 Library</button>
     <button onclick="showTab('pipeline')" id="tab-pipeline" class="tab-btn inactive-tab px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">⚡ Pipeline</button>
     <button onclick="showTab('schedule')" id="tab-schedule" class="tab-btn inactive-tab px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">📅 Schedule</button>
+    <button onclick="showTab('clips')"    id="tab-clips"    class="tab-btn inactive-tab px-3 md:px-4 py-2.5 text-[13px] font-bold whitespace-nowrap rounded-t-lg border-b-2 transition-all">🎮 Live Clips</button>
   </div>
 </div>
 
@@ -394,6 +395,84 @@ HTML = r"""<!DOCTYPE html>
           <p class="text-xs" style="color:#555">Checking services...</p>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- LIVE CLIPS TAB -->
+  <div id="tab-content-clips" class="tab-content hidden">
+
+    <!-- Top row: stream badges + VOD input -->
+    <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-5">
+      <div id="clips-twitch-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-xl"
+           style="background:rgba(145,70,255,.15);border:1px solid rgba(145,70,255,.3)">
+        <div class="w-2 h-2 rounded-full" style="background:#9146FF" id="clips-twitch-dot"></div>
+        <span class="text-[12px] font-bold" style="color:#9146FF">Twitch</span>
+        <span class="text-[11px]" style="color:rgba(255,255,255,.4)" id="clips-twitch-label">checking…</span>
+      </div>
+      <div id="clips-kick-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-xl"
+           style="background:rgba(83,199,121,.15);border:1px solid rgba(83,199,121,.3)">
+        <div class="w-2 h-2 rounded-full" style="background:#53C779" id="clips-kick-dot"></div>
+        <span class="text-[12px] font-bold" style="color:#53C779">Kick</span>
+        <span class="text-[11px]" style="color:rgba(255,255,255,.4)" id="clips-kick-label">checking…</span>
+      </div>
+      <div class="flex-1 flex gap-2 min-w-0">
+        <input id="clips-vod-url" type="url" placeholder="Paste Twitch/Kick VOD URL to process…"
+               class="flex-1 rounded-xl px-3 py-2 text-sm text-white min-w-0"
+               style="background:rgba(255,255,255,.05);border:1px solid #2A2A3C;outline:none" />
+        <button onclick="processVod()" id="clips-process-btn"
+                class="flex-shrink-0 px-4 py-2 rounded-xl text-[13px] font-black"
+                style="background:#C9A84C;color:#0A0A0F">Process</button>
+      </div>
+    </div>
+    <div id="clips-process-msg" class="hidden mb-4 text-sm rounded-xl px-3 py-2" style="background:rgba(201,168,76,.1);color:#C9A84C;border:1px solid rgba(201,168,76,.2)"></div>
+
+    <!-- Stats bar -->
+    <div class="grid grid-cols-4 gap-2 mb-5">
+      <div class="card rounded-xl p-3 text-center">
+        <p class="text-xl font-black text-amber-400" id="clips-stat-pending">—</p>
+        <p class="text-[10px] mt-0.5" style="color:#555">Pending</p>
+      </div>
+      <div class="card rounded-xl p-3 text-center">
+        <p class="text-xl font-black text-sv" id="clips-stat-approved">—</p>
+        <p class="text-[10px] mt-0.5" style="color:#555">Approved</p>
+      </div>
+      <div class="card rounded-xl p-3 text-center">
+        <p class="text-xl font-black text-gold" id="clips-stat-published">—</p>
+        <p class="text-[10px] mt-0.5" style="color:#555">Published</p>
+      </div>
+      <div class="card rounded-xl p-3 text-center">
+        <p class="text-xl font-black" style="color:#EF4444" id="clips-stat-rejected">—</p>
+        <p class="text-[10px] mt-0.5" style="color:#555">Rejected</p>
+      </div>
+    </div>
+
+    <!-- Three columns: Pending | Approved | Published -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+      <!-- PENDING REVIEW -->
+      <div>
+        <p class="text-[10px] font-bold mb-3" style="color:#F59E0B;letter-spacing:.1em">⏳ PENDING REVIEW</p>
+        <div id="clips-pending-list" class="space-y-3">
+          <p class="text-sm text-center py-8" style="color:#444">Loading…</p>
+        </div>
+      </div>
+
+      <!-- APPROVED -->
+      <div>
+        <p class="text-[10px] font-bold mb-3" style="color:#00C851;letter-spacing:.1em">✅ APPROVED</p>
+        <div id="clips-approved-list" class="space-y-3">
+          <p class="text-sm text-center py-8" style="color:#444">Loading…</p>
+        </div>
+      </div>
+
+      <!-- PUBLISHED -->
+      <div>
+        <p class="text-[10px] font-bold mb-3" style="color:#C9A84C;letter-spacing:.1em">🚀 PUBLISHED</p>
+        <div id="clips-published-list" class="space-y-3">
+          <p class="text-sm text-center py-8" style="color:#444">Loading…</p>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -554,6 +633,7 @@ function showTab(name) {
   if (name === 'schedule') loadSchedule();
   if (name === 'pipeline') loadEngineStatus();
   if (name === 'library')  loadLibrary();
+  if (name === 'clips')    loadClips();
 }
 
 // ── LIBRARY TAB ──────────────────────────────────────────────
@@ -1308,6 +1388,156 @@ async function approveDraft(name, btn) {
   }
 }
 
+// ── LIVE CLIPS ────────────────────────────────────────────────
+
+async function loadClips() {
+  // Load stats
+  try {
+    const stats = await fetch('/clips/stats').then(r=>r.json()).catch(()=>({}));
+    document.getElementById('clips-stat-pending').textContent   = stats.pending   ?? '—';
+    document.getElementById('clips-stat-approved').textContent  = stats.approved  ?? '—';
+    document.getElementById('clips-stat-published').textContent = stats.published ?? '—';
+    document.getElementById('clips-stat-rejected').textContent  = stats.rejected  ?? '—';
+  } catch(e) {}
+
+  // Load clip lists
+  const allClips = await fetch('/clips').then(r=>r.json()).catch(()=>[]);
+  const pending   = allClips.filter(c=>c.status==='pending');
+  const approved  = allClips.filter(c=>c.status==='approved');
+  const published = allClips.filter(c=>c.status==='published');
+
+  renderClipList('clips-pending-list',   pending,  true);
+  renderClipList('clips-approved-list',  approved, false, true);
+  renderClipList('clips-published-list', published, false);
+
+  // Stream status
+  try {
+    const ss = await fetch('/stream/status').then(r=>r.json()).catch(()=>({}));
+    updateStreamBadge('twitch', ss.twitch || {});
+    updateStreamBadge('kick',   ss.kick   || {});
+  } catch(e) {}
+}
+
+function updateStreamBadge(platform, info) {
+  const dot   = document.getElementById('clips-'+platform+'-dot');
+  const label = document.getElementById('clips-'+platform+'-label');
+  if (!dot || !label) return;
+  if (info.live) {
+    dot.style.background = platform==='twitch' ? '#9146FF' : '#53C779';
+    dot.style.boxShadow  = '0 0 6px '+(platform==='twitch'?'#9146FF':'#53C779');
+    label.textContent = '🔴 LIVE' + (info.viewers ? ' · '+info.viewers+' viewers' : '');
+  } else {
+    dot.style.background = '#555';
+    dot.style.boxShadow  = 'none';
+    label.textContent = info.error ? 'error' : 'offline';
+  }
+}
+
+function fmtDuration(secs) {
+  if (!secs) return '';
+  const m = Math.floor(secs/60), s = Math.round(secs%60);
+  return m+'m '+String(s).padStart(2,'0')+'s';
+}
+
+function renderClipList(containerId, clips, showActions, showPublish) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (!clips || !clips.length) {
+    el.innerHTML = '<p class="text-sm text-center py-8" style="color:#444">No clips here yet</p>';
+    return;
+  }
+  el.innerHTML = clips.map(c => {
+    const dur   = fmtDuration((c.end_time||0)-(c.start_time||0));
+    const title = (c.clip_title||'Untitled').slice(0,50);
+    const cap   = (c.caption||c.hook||'').slice(0,80);
+    const pid   = c.clip_id || '';
+    const tags  = [c.vod_url&&c.vod_url.includes('twitch')?'Twitch':null,
+                   c.vod_url&&c.vod_url.includes('kick')?'Kick':null].filter(Boolean);
+
+    const tagHtml = tags.map(t=>`<span class="pill" style="background:rgba(201,168,76,.15);color:#C9A84C">${t}</span>`).join('');
+    const durHtml  = dur ? `<span class="pill" style="background:rgba(255,255,255,.06);color:#888">${dur}</span>` : '';
+
+    const actionHtml = showActions ? `
+      <div class="flex gap-2 mt-3">
+        <button onclick="clipAction('approve','${pid}',this)"
+                class="flex-1 py-2 rounded-lg text-[11px] font-bold"
+                style="background:rgba(0,200,81,.15);color:#00C851">✅ Approve</button>
+        <button onclick="clipAction('reject','${pid}',this)"
+                class="flex-1 py-2 rounded-lg text-[11px] font-bold"
+                style="background:rgba(239,68,68,.12);color:#EF4444">✕ Reject</button>
+      </div>` : '';
+
+    const publishHtml = showPublish ? `
+      <div class="mt-3">
+        <button onclick="clipPublish('${pid}',this)"
+                class="w-full py-2 rounded-lg text-[11px] font-bold"
+                style="background:rgba(201,168,76,.15);color:#C9A84C">🚀 Publish via GHL</button>
+      </div>` : '';
+
+    return `<div class="card rounded-xl p-3 fade-up" id="clip-card-${pid}">
+      <div class="flex items-center gap-1.5 flex-wrap mb-1.5">${tagHtml}${durHtml}</div>
+      <p class="text-sm font-bold text-white mb-1">${title}</p>
+      ${cap ? `<p class="text-[11px] leading-relaxed" style="color:rgba(255,255,255,.4)">${cap}</p>` : ''}
+      ${actionHtml}${publishHtml}
+    </div>`;
+  }).join('');
+}
+
+async function clipAction(action, clipId, btn) {
+  if (!clipId) return;
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    const r = await fetch('/clips/'+action+'/'+clipId, {method:'POST'}).then(x=>x.json());
+    if (r.ok) {
+      const card = document.getElementById('clip-card-'+clipId);
+      if (card) { card.style.opacity='0'; card.style.transition='opacity .3s'; setTimeout(()=>card.remove(),300); }
+      loadClips();
+    } else {
+      btn.textContent = '✕ Error'; btn.disabled = false;
+    }
+  } catch(e) { btn.textContent = orig; btn.disabled = false; }
+}
+
+async function clipPublish(clipId, btn) {
+  if (!clipId) return;
+  const orig = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Publishing…';
+  try {
+    const r = await fetch('/clips/publish/'+clipId, {method:'POST'}).then(x=>x.json());
+    if (r.ok) {
+      btn.textContent = '✓ Published!';
+      btn.style.color = '#00C851';
+      setTimeout(loadClips, 1500);
+    } else {
+      btn.textContent = '✕ '+(r.error||'Failed');
+      btn.style.color = '#EF4444';
+      btn.disabled = false;
+    }
+  } catch(e) { btn.textContent = orig; btn.disabled = false; }
+}
+
+async function processVod() {
+  const urlEl = document.getElementById('clips-vod-url');
+  const msgEl = document.getElementById('clips-process-msg');
+  const btn   = document.getElementById('clips-process-btn');
+  const vod_url = urlEl.value.trim();
+  if (!vod_url) { urlEl.focus(); return; }
+  btn.disabled = true; btn.textContent = '⏳';
+  msgEl.classList.remove('hidden');
+  msgEl.textContent = 'Starting pipeline…';
+  try {
+    const r = await fetch('/clips/process', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({vod_url})
+    }).then(x=>x.json());
+    msgEl.textContent = r.message || (r.ok ? 'Pipeline started — check back in a few minutes.' : r.error);
+    msgEl.style.color = r.ok ? '#C9A84C' : '#EF4444';
+    if (r.ok) { urlEl.value = ''; setTimeout(loadClips, 5000); }
+  } catch(e) { msgEl.textContent = 'Error: '+e; msgEl.style.color='#EF4444'; }
+  btn.disabled = false; btn.textContent = 'Process';
+}
+
 // ── INIT ──────────────────────────────────────────────────────
 loadAll();
 loadJobs();
@@ -1933,6 +2163,245 @@ def api_schedule_post():
         "video_url": video_url,
         "message": f"Day {day} scheduled for {schedule_utc} across all 4 platforms ✅",
     })
+
+# ── LIVE CLIPS ROUTES ─────────────────────────────────────────────────────────
+# File-based clip queue: output/pending/, output/approved/, output/rejected/, output/published/
+# On Vercel (serverless) the watcher/FFmpeg can't run — the dashboard is read/approve only.
+# Local processing: python clip_main.py watch  OR  python clip_main.py process <url>
+
+def _clip_output_dir() -> "Path":
+    from pathlib import Path
+    # Resolve relative to this file so it works both locally and in Vercel
+    here = Path(__file__).parent
+    out = here / "output"
+    for sub in ("pending", "approved", "rejected", "published"):
+        (out / sub).try_mkdir_parents = None
+        try:
+            (out / sub).mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+    return out
+
+
+def _clips_list(status=None):
+    """Read clip JSON files from output/ subdirs. Returns list of dicts."""
+    import json as _json
+    from pathlib import Path
+    here = Path(__file__).parent
+    statuses = [status] if status else ["pending", "approved", "rejected", "published"]
+    records = []
+    for s in statuses:
+        folder = here / "output" / s
+        if not folder.exists():
+            continue
+        for p in sorted(folder.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True):
+            try:
+                data = _json.loads(p.read_text())
+                data.setdefault("status", s)
+                records.append(data)
+            except Exception:
+                pass
+    return records
+
+
+def _clips_move(clip_id: str, new_status: str):
+    """Move a clip JSON (and its video) to a new status folder. Returns updated record or None."""
+    import json as _json, shutil
+    from pathlib import Path
+    here = Path(__file__).parent
+    for s in ("pending", "approved", "rejected", "published"):
+        src_json = here / "output" / s / f"{clip_id}.json"
+        if src_json.exists():
+            data = _json.loads(src_json.read_text())
+            data["status"] = new_status
+            dst_folder = here / "output" / new_status
+            dst_folder.mkdir(parents=True, exist_ok=True)
+            dst_json = dst_folder / f"{clip_id}.json"
+            dst_json.write_text(_json.dumps(data, indent=2))
+            src_json.unlink(missing_ok=True)
+            # Move video file if it lives in the old folder
+            vid = Path(data.get("video_path", ""))
+            if vid.exists() and vid.parent == (here / "output" / s):
+                try:
+                    shutil.move(str(vid), str(dst_folder / vid.name))
+                    data["video_path"] = str(dst_folder / vid.name)
+                    dst_json.write_text(_json.dumps(data, indent=2))
+                except Exception:
+                    pass
+            return data
+    return None
+
+
+@app.route("/clips")
+def api_clips():
+    """Return all clips (optionally filtered by ?status=pending|approved|rejected|published)."""
+    status = request.args.get("status")
+    return jsonify(_clips_list(status if status else None))
+
+
+@app.route("/clips/stats")
+def api_clips_stats():
+    """Return pending/approved/rejected/published counts."""
+    from pathlib import Path
+    here = Path(__file__).parent
+    stats = {}
+    for s in ("pending", "approved", "rejected", "published"):
+        folder = here / "output" / s
+        stats[s] = len(list(folder.glob("*.json"))) if folder.exists() else 0
+    return jsonify(stats)
+
+
+@app.route("/clips/approve/<clip_id>", methods=["POST"])
+def api_clip_approve(clip_id):
+    rec = _clips_move(clip_id, "approved")
+    if rec:
+        return jsonify({"ok": True, "clip_id": clip_id, "status": "approved"})
+    return jsonify({"ok": False, "error": "clip not found"}), 404
+
+
+@app.route("/clips/reject/<clip_id>", methods=["POST"])
+def api_clip_reject(clip_id):
+    rec = _clips_move(clip_id, "rejected")
+    if rec:
+        return jsonify({"ok": True, "clip_id": clip_id, "status": "rejected"})
+    return jsonify({"ok": False, "error": "clip not found"}), 404
+
+
+@app.route("/clips/process", methods=["POST"])
+def api_clips_process():
+    """Accept {vod_url: '...'} and kick off the full pipeline in a background thread.
+    On Vercel this will fail gracefully — run clip_main.py locally instead."""
+    data = request.get_json(force=True, silent=True) or {}
+    vod_url = (data.get("vod_url") or "").strip()
+    if not vod_url:
+        return jsonify({"ok": False, "error": "vod_url required"}), 400
+
+    def _run():
+        try:
+            import clip_config as _cfg
+            from pipeline.vod_downloader import download_vod
+            from pipeline.ai_detector import transcribe_vod, detect_moments
+            from pipeline.clip_editor import render_clip
+            from utils.storage import ClipRecord, new_clip_id, save_clip, STATUS_PENDING
+            vod_path = download_vod(vod_url, _cfg.DOWNLOADS_DIR)
+            transcript = transcribe_vod(vod_path)
+            moments = detect_moments(transcript)
+            for m in moments[:_cfg.MAX_CLIPS_PER_STREAM]:
+                rec = ClipRecord(
+                    clip_id=new_clip_id(),
+                    status=STATUS_PENDING,
+                    vod_url=vod_url,
+                    start_time=m.start_time,
+                    end_time=m.end_time,
+                    clip_title=m.clip_title,
+                    hook=m.hook,
+                    caption=m.caption,
+                    reason=m.reason,
+                    video_path="",
+                )
+                out = render_clip(vod_path, rec)
+                rec.video_path = str(out)
+                save_clip(rec)
+        except Exception as exc:
+            print(f"[Clip pipeline] error: {exc}")
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    return jsonify({"ok": True, "message": f"Pipeline started for {vod_url}. Check /clips for results."})
+
+
+@app.route("/stream/status")
+def api_stream_status():
+    """Quick live-status check for Twitch + Kick (public APIs, no auth required)."""
+    import urllib.request as _ur
+    import json as _json
+
+    result = {"twitch": {"live": False, "channel": "suessvillano"}, "kick": {"live": False, "channel": "suessvillano"}}
+
+    # Twitch — needs Client-ID + app token, but we can at least report config status
+    twitch_client_id = os.environ.get("TWITCH_CLIENT_ID", "")
+    twitch_secret = os.environ.get("TWITCH_CLIENT_SECRET", "")
+    twitch_channel = os.environ.get("TWITCH_CHANNEL", "suessvillano")
+    result["twitch"]["channel"] = twitch_channel
+    if twitch_client_id and twitch_secret:
+        try:
+            # Get app access token
+            tok_req = _ur.Request(
+                "https://id.twitch.tv/oauth2/token",
+                data=f"client_id={twitch_client_id}&client_secret={twitch_secret}&grant_type=client_credentials".encode(),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            with _ur.urlopen(tok_req, timeout=6) as r:
+                tok = _json.loads(r.read())
+            token = tok.get("access_token", "")
+            # Check stream
+            stream_req = _ur.Request(
+                f"https://api.twitch.tv/helix/streams?user_login={twitch_channel}",
+                headers={"Client-ID": twitch_client_id, "Authorization": f"Bearer {token}"},
+            )
+            with _ur.urlopen(stream_req, timeout=6) as r:
+                sd = _json.loads(r.read())
+            streams = sd.get("data", [])
+            if streams:
+                result["twitch"].update({"live": True, "title": streams[0].get("title",""), "viewers": streams[0].get("viewer_count",0)})
+            else:
+                result["twitch"]["live"] = False
+        except Exception as e:
+            result["twitch"]["error"] = str(e)[:80]
+    else:
+        result["twitch"]["note"] = "Set TWITCH_CLIENT_ID + TWITCH_CLIENT_SECRET env vars"
+
+    # Kick — public API, no auth needed
+    kick_channel = os.environ.get("KICK_CHANNEL", "suessvillano")
+    result["kick"]["channel"] = kick_channel
+    try:
+        req = _ur.Request(
+            f"https://kick.com/api/v2/channels/{kick_channel}",
+            headers={"Accept": "application/json", "User-Agent": "Mozilla/5.0"},
+        )
+        with _ur.urlopen(req, timeout=8) as r:
+            kd = _json.loads(r.read())
+        live = kd.get("livestream") is not None
+        result["kick"]["live"] = live
+        if live:
+            ls = kd.get("livestream", {})
+            result["kick"].update({"title": ls.get("session_title", ""), "viewers": ls.get("viewer_count", 0)})
+    except Exception as e:
+        result["kick"]["error"] = str(e)[:80]
+
+    return jsonify(result)
+
+
+@app.route("/clips/publish/<clip_id>", methods=["POST"])
+def api_clip_publish(clip_id):
+    """Publish an approved clip via GHL social planner (reuses existing GHL wiring)."""
+    import json as _json
+    from pathlib import Path
+    here = Path(__file__).parent
+    src_json = here / "output" / "approved" / f"{clip_id}.json"
+    if not src_json.exists():
+        return jsonify({"ok": False, "error": "approved clip not found"}), 404
+    data = _json.loads(src_json.read_text())
+    video_path = data.get("video_path", "")
+    caption = data.get("caption") or data.get("clip_title") or "New clip — hybridfunding.co"
+
+    # Try GHL upload + schedule
+    if GHL_PIT_TOKEN:
+        try:
+            if os.path.exists(video_path):
+                video_url = ghl_upload_video(video_path)
+            else:
+                video_url = video_path  # assume it's already a URL
+            schedule_utc = get_next_schedule_slot()
+            ghl_result = ghl_schedule_post(video_url, caption, schedule_utc)
+            _clips_move(clip_id, "published")
+            return jsonify({"ok": True, "ghl": ghl_result, "scheduled_at": schedule_utc})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 500
+    else:
+        return jsonify({"ok": False, "error": "GHL_PIT_TOKEN not set — cannot publish"}), 503
+
 
 def run(host=None, port=None):
     host = host or os.environ.get("SV_HOST", "127.0.0.1")

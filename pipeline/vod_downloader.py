@@ -12,6 +12,7 @@ import requests
 
 import clip_config as config
 from utils.logger import get_logger
+from pipeline.drive_uploader import upload_vod
 
 log = get_logger(__name__)
 
@@ -103,19 +104,28 @@ def download_vod(
                 raise RuntimeError(f"VOD download failed after {retries} attempts:\n{e.stderr}")
 
     # Find the downloaded file
+    downloaded_file = None
     for ext in ["mp4", "mkv", "ts", "webm"]:
         candidate = output_dir / f"vod_{vod_id}.{ext}"
         if candidate.exists():
             log.info("Downloaded: %s (%.1f GB)", candidate.name,
                      candidate.stat().st_size / (1024**3))
-            return candidate
+            downloaded_file = candidate
+            break
 
-    # Fallback: find any new file
-    files = sorted(output_dir.glob(f"vod_{vod_id}.*"), key=lambda f: f.stat().st_mtime)
-    if files:
-        return files[-1]
+    if downloaded_file is None:
+        # Fallback: find any new file
+        files = sorted(output_dir.glob(f"vod_{vod_id}.*"), key=lambda f: f.stat().st_mtime)
+        if files:
+            downloaded_file = files[-1]
 
-    raise FileNotFoundError(f"Could not find downloaded file for VOD {vod_id}")
+    if downloaded_file is None:
+        raise FileNotFoundError(f"Could not find downloaded file for VOD {vod_id}")
+
+    # Auto-backup to Google Drive (non-blocking; failures are logged, not raised)
+    upload_vod(downloaded_file)
+
+    return downloaded_file
 
 
 def _extract_vod_id(url: str) -> str:

@@ -55,6 +55,17 @@ VILOUD_API_KEY    = os.getenv("VILOUD_API_KEY", "")
 VILOUD_CHANNEL_ID = os.getenv("VILOUD_CHANNEL_ID", "6b3e6d6696fb33d051c1ca4b341d21cf")
 CDN_BASE_URL      = os.getenv("CDN_BASE_URL", "")
 
+# ─── Opus Clip ───────────────────────────────────────────────────────────────
+OPUS_CLIP_API_KEY = os.getenv("OPUS_CLIP_API_KEY", "sk-6DW-CjS1wZG7wozl4w0wRPxK9INhR8A8gGIa9LBA")
+
+# ─── Google Drive (backup VOD storage) ───────────────────────────────────────
+GDRIVE_ENABLED             = _bool("GDRIVE_ENABLED", "true")
+GDRIVE_CREDENTIALS_PATH    = os.getenv("GDRIVE_CREDENTIALS_PATH", str(BASE_DIR / "gdrive_credentials.json"))
+GDRIVE_TOKEN_PATH          = os.getenv("GDRIVE_TOKEN_PATH", str(BASE_DIR / "gdrive_token.json"))
+GDRIVE_RAW_VODS_FOLDER_ID  = os.getenv("GDRIVE_RAW_VODS_FOLDER_ID", "1YtmLRteyfzvEdBLZBNESofZsMBbc3_y5")
+GDRIVE_CLIPS_FOLDER_ID     = os.getenv("GDRIVE_CLIPS_FOLDER_ID", "1i7HCwhX5w-ZmKEgq08w30YtUhCKtEeaA")
+GDRIVE_PUBLISHED_FOLDER_ID = os.getenv("GDRIVE_PUBLISHED_FOLDER_ID", "1xqGvEb-5XYvxUjisSFVmuD7Gn4rI105W")
+
 # ─── Music ───────────────────────────────────────────────────────────────────
 _music_raw = os.getenv("MUSIC_TRACKS", "")
 MUSIC_TRACKS = [p.strip() for p in _music_raw.split(",") if p.strip()] if _music_raw else []
@@ -72,6 +83,8 @@ OUTPUT_HEIGHT = int(os.getenv("OUTPUT_HEIGHT", "1920"))
 # ─── Platform toggles ────────────────────────────────────────────────────────
 def _bool(key, default="true"):
     return os.getenv(key, default).lower() in ("true", "1", "yes")
+
+
 
 PLATFORMS = {
     "tiktok":    _bool("PLATFORM_TIKTOK"),
@@ -116,4 +129,5 @@ def check_config():
         "music":     bool(MUSIC_TRACKS),
         "kick":      True,  # No keys needed — Kick is public
         "viloud":    bool(VILOUD_API_KEY),
+        "gdrive":    bool(GDRIVE_ENABLED and Path(GDRIVE_CREDENTIALS_PATH).exists()),
     }

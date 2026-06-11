@@ -11,6 +11,11 @@ openai-whisper>=20231117
 # Paid "hero" video via Google Veo (fal.ai needs only an API key, no SDK)
 google-genai>=0.3
 
+# ── Google Drive (auto-backup VODs + clips) ─────────────────────────────────
+google-api-python-client>=2.100
+google-auth-oauthlib>=1.1
+google-auth-httplib2>=0.2
+
 # ── Live Clips pipeline (Twitch/Kick VOD processing) ────────────────────────
 yt-dlp>=2024.1
 python-telegram-bot==21.3

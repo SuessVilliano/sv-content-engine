@@ -1,0 +1,14 @@
+{
+  "package_name": "LIV8_Teaser_Trailer_Production_Package",
+  "version": "1.0",
+  "master_duration_seconds": 60,
+  "master_aspect_ratio": "16:9",
+  "master_fps": 24,
+  "character_reference": "09_REFERENCE_ASSETS/jamaur_reference.jpg",
+  "visual_board": "09_REFERENCE_ASSETS/liv8_story_visual_board.png",
+  "primary_title": "HUSTLE. PRAY. STAY OUT THE WAY.",
+  "series_brand": "LIV8",
+  "episode_001": "The Years You Didn't See",
+  "core_line": "Don't take over the world. Take ownership of yours.",
+  "tagline": "Create it in the mind. Watch it come alive."
+}

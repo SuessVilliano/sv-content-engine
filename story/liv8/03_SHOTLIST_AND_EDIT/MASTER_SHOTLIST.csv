@@ -1,0 +1,18 @@
+shot_id,timecode,duration_sec,sequence,visual,camera,character_mode,sound,voiceover,meaning
+S01,00:00-00:04,4,BLACK / AUDIO HOOK,Black frame; no image initially,Locked,None,"Old notification, crowd murmur, electrical hum",For a long time… I knew how to win.,Silence becomes tension
+S02,00:04-00:06,2,THE RISE,Young Jamaur enters packed event; crowd parts,Handheld 24mm push,Hustle,Beat enters,Sales. Teams.,Movement = progress
+S03,00:06-00:08,2,LEVERAGE,"Affiliate dashboard, funnels, ad metrics, travel/studio flashes",Fast montage,Hustle/Creative,Clicks become percussion,Traffic. Affiliates.,Winning montage
+S04,00:08-00:10,2,TRADING / TECH,Trading screens and systems,35mm moving close-up,Trader,Low bass,Trading. Technology. I thought I understood the game.,Confidence
+S05,00:10-00:15,5,THE FLOOR MOVES,Recurring income graph bends; cable disconnects from machine,Slow 70mm compression,Executive,Music loses notes,Then I learned...,Title card at end
+S06,00:15-00:18,3,SYSTEM STRESS,"Beta software, servers, empty chair",Locked,Builder,Electrical glitches,Businesses broke.,Instability without explosions
+S07,00:18-00:21,3,LOSS,"Dog collar, family photo, empty room",Locked macro,Human,Room tone only,People left. People died.,Grief via objects
+S08,00:21-00:23,2,UNSPOKEN,"Court corridor / rearview reflections, abstracted",Long lens,Ghost,Distant low drone,Some parts... I still don't talk about.,No incriminating specifics
+S09,00:23-00:29,6,UNDERGROUND,"Night in parked car, notification, phone goes dark",85mm static,Ghost,Breath + city,So eventually... I stopped letting people see me.,Phone motif
+S10,00:29-00:34,5,RESTART,Monitors power up one-by-one; code/workflows/AI,Controlled dolly,Builder,Keyboard + four-note motif returns,But I never stopped building.,Camera movement returns
+S11,00:34-00:38,4,INSIDE,"Support, developers, operations",40mm steadicam,Executive/Builder,Rhythmic machinery,"This time, I didn't just want to know what the software could do.",Human infrastructure
+S12,00:38-00:41,3,CONVERSATION BECOMES SYSTEM,Natural-language prompt morphs into page/CRM/appointment,Impossible continuous move,Digital,Subtle synth bloom,I wanted to know who was behind it.,AI as invisible leverage
+S13,00:41-00:46,5,CONVERGENCE,"Digital city of workflows, charts, health, family, music",Slow orbital,Digital Jamaur,Score expands,Because eventually I realized... I wasn't building businesses.,All worlds connect
+S14,00:46-00:51,5,THE SELF,Young/present/digital/future Jamaur line up across environments,Slow push,All,Four-note theme,I was building the person capable of surviving them.,Identity convergence
+S15,00:51-00:55,4,PRESENT,Natural light close-up; stillness,50mm locked,Human,Music strips down,And now... everything is starting to make sense.,Human > machine
+S16,00:55-00:58,3,TITLE,HUSTLE / PRAY / STAY OUT THE WAY -> LIV8,Graphic,N/A,Impact + reverse texture,,Brand reveal
+S17,00:58-01:00,2,PROMISE,Black; Episode 001 card,Locked,N/A,Heartbeat,Create it in the mind... watch it come alive.,End unresolved

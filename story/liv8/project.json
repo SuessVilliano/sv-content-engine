@@ -1,0 +1,23 @@
+{
+  "project": "LIV8 Teaser Trailer",
+  "title": "HUSTLE. PRAY. STAY OUT THE WAY.",
+  "episode_001": "The Years You Didn't See",
+  "duration_seconds": 60,
+  "fps": 24,
+  "master_resolution": "3840x2160",
+  "master_aspect_ratio": "16:9",
+  "vertical_resolution": "1080x1920",
+  "render_mode": "shot_by_shot",
+  "character_reference": "source_package/09_REFERENCE_ASSETS/jamaur_reference.jpg",
+  "style_reference": "source_package/09_REFERENCE_ASSETS/liv8_story_visual_board.png",
+  "shot_list": "source_package/03_SHOTLIST_AND_EDIT/MASTER_SHOTLIST.csv",
+  "shot_prompts": "source_package/04_VIDEO_GENERATION_PROMPTS/",
+  "core_thesis": "Don't take over the world. Take ownership of yours.",
+  "tagline": "Create it in the mind. Watch it come alive.",
+  "outputs": [
+    "60s_16x9_master",
+    "60s_9x16_vertical",
+    "30s_cutdown",
+    "15s_cutdown"
+  ]
+}
